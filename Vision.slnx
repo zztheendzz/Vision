@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Communication/Communication.csproj" Id="44b279c6-c903-405e-b0b8-37a5157ae6eb" />
+  <Project Path="UI/UI.csproj" Id="422feea9-914a-47ac-9787-edd20631809c" />
+  <Project Path="Vision/Vision.csproj" />
+</Solution>

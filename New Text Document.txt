@@ -1,0 +1,90 @@
+wood.sln
+│
+├── wood/                                  # project chính, namespace gốc: wood
+│   │
+│   ├── Core/                              # hợp đồng chung, không phụ thuộc thư mục nào khác
+│   │   ├── PortDef.cs                     # có
+│   │   ├── ParamDef.cs                    # sửa: thêm ParamKind, nhóm, cờ nạp lại, đơn vị
+│   │   ├── ParamKind.cs                   # mới
+│   │   ├── VisionToolInput.cs             # có
+│   │   ├── VisionToolResult.cs            # sửa: dùng ResultStatus, hiển thị tạo theo yêu cầu
+│   │   ├── ResultStatus.cs                # mới
+│   │   ├── ToolContext.cs                 # mới
+│   │   └── RunMode.cs                     # mới
+│   │
+│   ├── Types/                             # kiểu domain bất biến, chỉ chứa số
+│   │   ├── Pose2D.cs                      # mới
+│   │   ├── Point2D.cs                     # mới
+│   │   └── Roi.cs                         # mới
+│   │
+│   ├── Services/                          # tài nguyên ngoài, chủ yếu là interface
+│   │   ├── ResourceManager.cs             # mới
+│   │   ├── IVisionLogger.cs               # mới
+│   │   ├── IRobotLink.cs                  # mới
+│   │   ├── ICameraSource.cs               # mới
+│   │   └── Mocks/
+│   │       ├── MockRobotLink.cs           # mới (để test không cần robot)
+│   │       └── MockCameraSource.cs        # mới
+│   │
+│   ├── Tools/
+│   │   ├── Abstractions/
+│   │   │   ├── IVisionTool.cs             # chuyển + sửa: Initialize, Validate, Run(input, context)
+│   │   │   ├── ToolDescriptor.cs          # mới
+│   │   │   └── ToolKind.cs                # mới
+│   │   ├── Registry/
+│   │   │   ├── ToolRegistry.cs            # chuyển + sửa: lưu descriptor, quét attribute
+│   │   │   └── VisionToolAttribute.cs     # mới
+│   │   ├── Bases/
+│   │   │   ├── VisionToolBase.cs          # chuyển + sửa
+│   │   │   ├── SourceToolBase.cs          # mới
+│   │   │   ├── PureToolBase.cs            # mới
+│   │   │   ├── StatefulToolBase.cs        # mới
+│   │   │   └── ActionToolBase.cs          # mới (tự kiểm tra dry-run)
+│   │   ├── Source/
+│   │   │   ├── LoadImageTool.cs           # chuyển + sửa
+│   │   │   └── ImageSourceTool.cs         # mới
+│   │   ├── Preprocess/
+│   │   │   └── ThresholdTool.cs           # chuyển + sửa
+│   │   ├── Locate/
+│   │   │   ├── BlobTool.cs                # chuyển + sửa
+│   │   │   └── FindObjectTool.cs          # mới
+│   │   ├── Transform/
+│   │   │   └── PixelToRobotTool.cs        # mới
+│   │   └── Action/
+│   │       └── SendRobotTool.cs           # mới
+│   │
+│   ├── Graph/
+│   │   ├── Port.cs                        # có (Port, InputPort, OutputPort)
+│   │   ├── Connection.cs                  # có
+│   │   ├── VisionNode.cs                  # sửa nhỏ: theo dõi tham số cần nạp lại
+│   │   └── VisionGraph.cs                 # có
+│   │
+│   ├── Execution/
+│   │   ├── GraphExecutor.cs               # sửa: truyền context, gọi Initialize/Validate
+│   │   ├── GraphRunResult.cs              # tách ra từ GraphExecutor.cs
+│   │   ├── NodeRun.cs                     # tách ra từ GraphExecutor.cs
+│   │   ├── NodeStatus.cs                  # tách ra từ GraphExecutor.cs
+│   │   └── RunOptions.cs                  # sửa: thêm RunMode
+│   │
+│   ├── Project/                           # làm sau
+│   │   ├── Recipe.cs                      # mới
+│   │   ├── GraphSerializer.cs             # mới
+│   │   ├── GraphDto.cs                    # mới
+│   │   └── LoadReport.cs                  # mới
+│   │
+│   ├── Runtime/                           # làm sau
+│   │   ├── Runner.cs                      # mới
+│   │   ├── RunVerdict.cs                  # mới
+│   │   └── CycleRecord.cs                 # mới
+│   │
+│   ├── UI/                                # làm sau cùng (WPF + Nodify), tạo khi bắt đầu
+│   │
+│   └── Demo/
+│       └── GraphDemo.cs                   # có, sửa theo contract mới
+│
+└── wood.Tests/                            # project test riêng (mới)
+    ├── Fakes/                             # tool giả không cần Halcon, context giả
+    ├── GraphTests.cs                      # Connect, vòng lặp, thứ tự chạy
+    ├── ExecutorTests.cs                   # Skipped, hủy, tham số ghi đè
+    ├── ActionToolTests.cs                 # DryRun không gây tác dụng phụ
+    └── SerializerTests.cs                 # lưu, mở, lưu lại phải giống nhau

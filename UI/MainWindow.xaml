@@ -1,0 +1,227 @@
+﻿<Window x:Class="VisionUIProject.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:nodify="https://miroiu.github.io/nodify"
+        mc:Ignorable="d"
+        Title="Vision Tool Editor - Visual Studio Style"
+        Height="850"
+        Width="1450"
+        Background="#FF2D2D30"
+        Foreground="#FFCCCCCC">
+
+    <Window.Resources>
+        <!-- Bảng màu chuẩn Visual Studio Dark Theme -->
+        <SolidColorBrush x:Key="VSBackgroundBrush" Color="#FF2D2D30"/>
+        <SolidColorBrush x:Key="VSDarkBackgroundBrush" Color="#FF1E1E1E"/>
+        <SolidColorBrush x:Key="VSControlBackgroundBrush" Color="#FF333337"/>
+        <SolidColorBrush x:Key="VSBorderBrush" Color="#FF3F3F46"/>
+        <SolidColorBrush x:Key="VSBlueAccentBrush" Color="#FF007ACC"/>
+        <SolidColorBrush x:Key="VSTextBrush" Color="#FFF1F1F1"/>
+        <SolidColorBrush x:Key="VSGrayTextBrush" Color="#FF999999"/>
+
+        <!-- Style chung cho GroupBox mang phong cách VS Panel -->
+        <Style TargetType="GroupBox">
+            <Setter Property="Foreground" Value="{StaticResource VSTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource VSBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Header Panel -->
+                            <Border Background="#FF252526" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1,1,1,0" Padding="8,4">
+                                <ContentPresenter x:Name="HeaderContent" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" ContentSource="Header" RecognizesAccessKey="True"/>
+                            </Border>
+                            <!-- Content Panel -->
+                            <Border Grid.Row="1" Background="{StaticResource VSBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style chung cho Button -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource VSControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource VSTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource VSBorderBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Khi di chuột vào (Hover) -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF3F3F46"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource VSBlueAccentBrush}"/>
+                            </Trigger>
+
+                            <!-- Khi bấm chuột xuống (Pressed) -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource VSBlueAccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="2">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" MinWidth="200"/>
+            <ColumnDefinition Width="4"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="4"/>
+            <ColumnDefinition Width="300" MinWidth="240"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ================= 1. CỘT TRÁI: CAMERA & TOOLBOX DROPDOWN ================= -->
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="220"/>
+                <RowDefinition Height="4"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Vùng hiển thị Camera / Ảnh gốc -->
+            <GroupBox Grid.Row="0" Header="📷 Camera &amp; Image View">
+                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
+                    <TextBlock Text="[ Live Camera / Captured Image ]" 
+                               HorizontalAlignment="Center" VerticalAlignment="Center" 
+                               Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
+                </Border>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- Toolbox dạng Dropdown lựa chọn tool (Phong cách VS Tool Window) -->
+            <GroupBox Grid.Row="2" Header="🛠️ Tool Selection">
+                <StackPanel Margin="6">
+                    <TextBlock Text="Chọn Tool để thêm vào hệ thống:" Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                    <!-- Tool Dropdown -->
+                    <ComboBox Height="28" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4" Margin="0,0,0,10" IsEditable="False">
+                        <ComboBoxItem Content="📥 Image Acquisition" IsSelected="True"/>
+                        <ComboBoxItem Content="🔍 Threshold / Binarize"/>
+                        <ComboBoxItem Content="📐 Edge Detection"/>
+                        <ComboBoxItem Content="🔄 Geometric Match"/>
+                        <ComboBoxItem Content="📏 Caliper / Measure"/>
+                        <ComboBoxItem Content="📦 Blob Analysis"/>
+                        <ComboBoxItem Content="🏷️ OCR / Barcode"/>
+                    </ComboBox>
+
+                    <Button Content="➕ Thêm Node" Height="30" Background="{StaticResource VSBlueAccentBrush}" BorderBrush="{StaticResource VSBlueAccentBrush}" FontWeight="SemiBold"/>
+                </StackPanel>
+            </GroupBox>
+        </Grid>
+
+        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
+
+        <!-- ================= 2. CỘT GIỮA: CHIA ĐÔI (NODIFY & KẾT QUẢ XỬ LÝ) ================= -->
+        <Grid Grid.Column="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Phần 2A: Vùng kéo thả Node (NodifyEditor) -->
+            <Border Grid.Column="0" Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <nodify:NodifyEditor Background="{StaticResource VSDarkBackgroundBrush}" GridCellSize="20"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" Background="#CC2D2D30">
+                        <Button Content=" ➕ " Background="{StaticResource VSControlBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" Margin="1" Width="26" Height="24"/>
+                        <Button Content=" ➖ " Background="{StaticResource VSControlBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" Margin="1" Width="26" Height="24"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
+
+            <!-- Phần 2B: Vùng hiển thị kết quả xử lý ảnh -->
+            <GroupBox Grid.Column="2" Header="📺 Vùng Kết Quả Xử Lý">
+                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
+                    <TextBlock Text="[ Hiển thị hình ảnh sau khi qua các Vision Tool / Kết quả đo đạc ]" 
+                               HorizontalAlignment="Center" VerticalAlignment="Center" 
+                               Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="15"/>
+                </Border>
+            </GroupBox>
+        </Grid>
+
+        <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
+
+        <!-- ================= 3. CỘT PHẢI: PROPERTY, VIDEO GIỚI THIỆU & LOG ================= -->
+        <Grid Grid.Column="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="4"/>
+                <RowDefinition Height="160"/>
+                <RowDefinition Height="4"/>
+                <RowDefinition Height="140"/>
+            </Grid.RowDefinitions>
+
+            <!-- Bảng thuộc tính (Property Inspector - Giống Properties Window của VS) -->
+            <GroupBox Grid.Row="0" Header="⚙️ Properties">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="6">
+                        <TextBlock Text="Chọn một node trên sơ đồ để tinh chỉnh thông số." 
+                                   Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="Node Name:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
+                        <TextBox Text="Threshold_01" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
+
+                        <TextBlock Text="Threshold Min:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
+                        <TextBox Text="128" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
+
+                        <TextBlock Text="Threshold Max:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
+                        <TextBox Text="255" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
+
+                        <Button Content="Apply &amp; Test Run" Margin="0,12,0,0" Padding="10,6" 
+                                Background="{StaticResource VSBlueAccentBrush}" BorderBrush="{StaticResource VSBlueAccentBrush}" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- Khung màn hình hiển thị Video Giới Thiệu (Phía trên phần Log) -->
+            <GroupBox Grid.Row="2" Header="🎥 Video Giới Thiệu">
+                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
+                    <!-- Có thể thay thế Border này bằng thẻ <MediaElement Source="..." LoadedBehavior="Play"/> sau này -->
+                    <Grid>
+                        <TextBlock Text="[ Video Mặc Định / Preview ]" 
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                   Foreground="{StaticResource VSGrayTextBrush}" FontSize="12"/>
+                    </Grid>
+                </Border>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- Khu vực hiện Log (Giống Output Window của VS) -->
+            <GroupBox Grid.Row="4" Header="📋 Output Logs">
+                <TextBox Background="{StaticResource VSDarkBackgroundBrush}" Foreground="#FF4EC9B0" BorderBrush="{StaticResource VSBorderBrush}" 
+                         IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         Text="[Info] Visual Studio UI layout initialized.&#x0a;[Info] Camera connected (GigE).&#x0a;[Ready] Waiting for execution..." 
+                         Padding="4" FontFamily="Consolas" FontSize="11"/>
+            </GroupBox>
+        </Grid>
+    </Grid>
+</Window>
