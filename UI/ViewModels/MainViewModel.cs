@@ -1,5 +1,7 @@
-﻿using System;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 using Vision.Graph;
 
@@ -7,6 +9,9 @@ namespace UI.ViewModels
 {
     public  class MainViewModel : ViewModelBase, IDisposable
     {
+
+
+
         private readonly VisionGraph _graph;
 
         public GraphEditorViewModel Editor { get; }
@@ -21,6 +26,7 @@ namespace UI.ViewModels
         {
             var g = new VisionGraph();
             var load = g.AddNode("LoadImage", 40, 80);
+         
             var thr = g.AddNode("Threshold", 300, 80);
             var thr2 = g.AddNode("Threshold", 301, 80);
             var blobA = g.AddNode("Blob", 560, 20);

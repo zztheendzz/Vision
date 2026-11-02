@@ -33,6 +33,7 @@ namespace UI.ViewModels
         [ObservableProperty]
         private long _elapsedMs;
 
+
         public NodeViewModel(VisionNode model)
         {
             Model = model;

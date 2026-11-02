@@ -1,227 +1,243 @@
-﻿<Window x:Class="VisionUIProject.MainWindow"
+﻿<Window x:Class="UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:nodify="https://miroiu.github.io/nodify"
+        xmlns:nodify="https://miroiu.github.io/nodify" 
         mc:Ignorable="d"
         Title="Vision Tool Editor - Visual Studio Style"
+        Style="{StaticResource VsWindow}"
+        xmlns:views="clr-namespace:UI.View"
         Height="850"
         Width="1450"
         Background="#FF2D2D30"
         Foreground="#FFCCCCCC">
 
-    <Window.Resources>
-        <!-- Bảng màu chuẩn Visual Studio Dark Theme -->
-        <SolidColorBrush x:Key="VSBackgroundBrush" Color="#FF2D2D30"/>
-        <SolidColorBrush x:Key="VSDarkBackgroundBrush" Color="#FF1E1E1E"/>
-        <SolidColorBrush x:Key="VSControlBackgroundBrush" Color="#FF333337"/>
-        <SolidColorBrush x:Key="VSBorderBrush" Color="#FF3F3F46"/>
-        <SolidColorBrush x:Key="VSBlueAccentBrush" Color="#FF007ACC"/>
-        <SolidColorBrush x:Key="VSTextBrush" Color="#FFF1F1F1"/>
-        <SolidColorBrush x:Key="VSGrayTextBrush" Color="#FF999999"/>
+    <Window.InputBindings>
+        <KeyBinding Key="Delete" Command="{Binding Editor.DeleteSelectedCommand}" />
+    </Window.InputBindings>
 
-        <!-- Style chung cho GroupBox mang phong cách VS Panel -->
-        <Style TargetType="GroupBox">
-            <Setter Property="Foreground" Value="{StaticResource VSTextBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource VSBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="4"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="GroupBox">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <!-- Header Panel -->
-                            <Border Background="#FF252526" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1,1,1,0" Padding="8,4">
-                                <ContentPresenter x:Name="HeaderContent" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" ContentSource="Header" RecognizesAccessKey="True"/>
-                            </Border>
-                            <!-- Content Panel -->
-                            <Border Grid.Row="1" Background="{StaticResource VSBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
-                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
-                            </Border>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+    <DockPanel>
 
-        <!-- Style chung cho Button -->
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource VSControlBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource VSTextBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource VSBorderBrush}"/>
-            <Setter Property="Padding" Value="8,4"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" 
-                                Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="1" 
-                                CornerRadius="0">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <!-- Khi di chuột vào (Hover) -->
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#FF3F3F46"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource VSBlueAccentBrush}"/>
-                            </Trigger>
+        <!-- ================= THANH MENU ================= -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_Tệp">
+                <MenuItem Header="Mới" InputGestureText="Ctrl+N" />
+                <MenuItem Header="Mở..." InputGestureText="Ctrl+O" />
+                <Separator />
+                <MenuItem Header="Lưu" InputGestureText="Ctrl+S" />
+                <MenuItem Header="Lưu thành..." InputGestureText="Ctrl+Shift+S" />
+                <Separator />
+                <MenuItem Header="Thoát" InputGestureText="Alt+F4" />
+            </MenuItem>
+            <MenuItem Header="_Sửa">
+                <MenuItem Header="Hoàn tác" InputGestureText="Ctrl+Z" />
+                <MenuItem Header="Làm lại" InputGestureText="Ctrl+Y" />
+                <Separator />
+                <MenuItem Header="Xóa node" InputGestureText="Delete" Command="{Binding Editor.DeleteSelectedCommand}" />
+                <MenuItem Header="Chọn tất cả" InputGestureText="Ctrl+A" />
+            </MenuItem>
+            <MenuItem Header="_Xem">
+                <MenuItem Header="Toolbox" IsCheckable="True" IsChecked="True" />
+                <MenuItem Header="Thuộc tính" IsCheckable="True" IsChecked="True" />
+                <MenuItem Header="Ảnh gốc" IsCheckable="True" IsChecked="True" />
+                <MenuItem Header="Ảnh xử lý" IsCheckable="True" IsChecked="True" />
+                <Separator />
+                <MenuItem Header="Output" IsCheckable="True" IsChecked="True" />
+                <MenuItem Header="Kết nối" IsCheckable="True" IsChecked="True" />
+                <MenuItem Header="Kết quả" IsCheckable="True" IsChecked="True" />
+                <Separator />
+                <MenuItem Header="Đặt lại bố cục" />
+            </MenuItem>
+            <MenuItem Header="_Dự án">
+                <MenuItem Header="Công thức (Recipe)..." />
+                <MenuItem Header="Hiệu chuẩn camera - robot..." />
+                <MenuItem Header="Thư mục ảnh mẫu..." />
+            </MenuItem>
+            <MenuItem Header="_Chạy">
+                <MenuItem Header="Chạy một lần" InputGestureText="F5" />
+                <MenuItem Header="Chạy liên tục" InputGestureText="Ctrl+F5" />
+                <MenuItem Header="Dừng" InputGestureText="Shift+F5" />
+                <Separator />
+                <MenuItem Header="Chế độ">
+                    <MenuItem Header="Chạy thử (không điều khiển thiết bị)" IsCheckable="True" IsChecked="True" />
+                    <MenuItem Header="Chạy thật" IsCheckable="True" />
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Kết nối">
+                <MenuItem Header="Kết nối tất cả" Command="{Binding Devices.ConnectAllCommand}" />
+                <MenuItem Header="Ngắt tất cả" Command="{Binding Devices.DisconnectAllCommand}" />
+                <Separator />
+                <MenuItem Header="Cấu hình thiết bị..." Click="OpenDeviceConfig_Click" />
+            </MenuItem>
+            <MenuItem Header="C_ông cụ">
+                <MenuItem Header="Tùy chọn..." />
+            </MenuItem>
+            <MenuItem Header="_Trợ giúp">
+                <MenuItem Header="Giới thiệu" />
+            </MenuItem>
+        </Menu>
 
-                            <!-- Khi bấm chuột xuống (Pressed) -->
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource VSBlueAccentBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
+        <!-- ================= THANH CÔNG CỤ ================= -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource VsPanelHeaderBrush}"
+                BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,1">
+            <StackPanel Orientation="Horizontal" Margin="4,3">
+                <Button Content="Mới" />
+                <Button Content="Mở" />
+                <Button Content="Lưu" />
+                <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-    <Grid Margin="2">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260" MinWidth="200"/>
-            <ColumnDefinition Width="4"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="4"/>
-            <ColumnDefinition Width="300" MinWidth="240"/>
-        </Grid.ColumnDefinitions>
+                <Button Content="Hoàn tác" />
+                <Button Content="Làm lại" />
+                <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-        <!-- ================= 1. CỘT TRÁI: CAMERA & TOOLBOX DROPDOWN ================= -->
-        <Grid Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="220"/>
-                <RowDefinition Height="4"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+                <Button Content="&#9654; Chạy một lần" />
+                <Button Content="&#10227; Chạy liên tục" />
+                <Button Content="&#9632; Dừng" />
+                <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-            <!-- Vùng hiển thị Camera / Ảnh gốc -->
-            <GroupBox Grid.Row="0" Header="📷 Camera &amp; Image View">
-                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
-                    <TextBlock Text="[ Live Camera / Captured Image ]" 
-                               HorizontalAlignment="Center" VerticalAlignment="Center" 
-                               Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
-                </Border>
-            </GroupBox>
+                <TextBlock Text="Chế độ:" VerticalAlignment="Center" Margin="4,0,4,0"
+                           Foreground="{StaticResource VsMutedBrush}" />
+                <ToggleButton Content="Chạy thử" IsChecked="True" />
+                <ToggleButton Content="Chạy thật" Style="{StaticResource LiveToggle}" />
+                <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-            <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
+                <Button Content="Vừa khung" />
+            </StackPanel>
+        </Border>
 
-            <!-- Toolbox dạng Dropdown lựa chọn tool (Phong cách VS Tool Window) -->
-            <GroupBox Grid.Row="2" Header="🛠️ Tool Selection">
-                <StackPanel Margin="6">
-                    <TextBlock Text="Chọn Tool để thêm vào hệ thống:" Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+        <!-- ================= THANH TRẠNG THÁI (xanh như Visual Studio) ================= -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource VsAccentBrush}" Padding="10,3">
+            <DockPanel TextElement.Foreground="White">
 
-                    <!-- Tool Dropdown -->
-                    <ComboBox Height="28" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4" Margin="0,0,0,10" IsEditable="False">
-                        <ComboBoxItem Content="📥 Image Acquisition" IsSelected="True"/>
-                        <ComboBoxItem Content="🔍 Threshold / Binarize"/>
-                        <ComboBoxItem Content="📐 Edge Detection"/>
-                        <ComboBoxItem Content="🔄 Geometric Match"/>
-                        <ComboBoxItem Content="📏 Caliper / Measure"/>
-                        <ComboBoxItem Content="📦 Blob Analysis"/>
-                        <ComboBoxItem Content="🏷️ OCR / Barcode"/>
-                    </ComboBox>
-
-                    <Button Content="➕ Thêm Node" Height="30" Background="{StaticResource VSBlueAccentBrush}" BorderBrush="{StaticResource VSBlueAccentBrush}" FontWeight="SemiBold"/>
+                <!-- Tình trạng từng kết nối: xám là chưa kết nối -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <ItemsControl ItemsSource="{Binding Devices.Devices}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="10,0,0,0">
+                                    <Ellipse x:Name="Dot" Width="9" Height="9" Fill="#9D9D9D"
+                                             Stroke="White" StrokeThickness="1" Margin="0,0,4,0" />
+                                    <TextBlock Text="{Binding Name}" />
+                                </StackPanel>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                        <Setter TargetName="Dot" Property="Fill" Value="#3FB950" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Chế độ: Chạy thử" Margin="20,0,0,0" />
                 </StackPanel>
-            </GroupBox>
-        </Grid>
 
-        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
+                <TextBlock Text="Sẵn sàng" />
+            </DockPanel>
+        </Border>
 
-        <!-- ================= 2. CỘT GIỮA: CHIA ĐÔI (NODIFY & KẾT QUẢ XỬ LÝ) ================= -->
-        <Grid Grid.Column="2">
+        <!-- ================= VÙNG LÀM VIỆC ================= -->
+        <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="240" MinWidth="160" />
                 <ColumnDefinition Width="4" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="420" MinWidth="240" />
             </Grid.ColumnDefinitions>
 
-            <!-- Phần 2A: Vùng kéo thả Node (NodifyEditor) -->
-            <Border Grid.Column="0" Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
-                <Grid>
-                    <nodify:NodifyEditor Background="{StaticResource VSDarkBackgroundBrush}" GridCellSize="20"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" Background="#CC2D2D30">
-                        <Button Content=" ➕ " Background="{StaticResource VSControlBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" Margin="1" Width="26" Height="24"/>
-                        <Button Content=" ➖ " Background="{StaticResource VSControlBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" Margin="1" Width="26" Height="24"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
+            <!-- Cột trái: Toolbox (trên) và Thuộc tính (dưới) -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*" MinHeight="120" />
+                    <RowDefinition Height="4" />
+                    <RowDefinition Height="2*" MinHeight="120" />
+                </Grid.RowDefinitions>
+                <views:ToolboxPanel Grid.Row="0" />
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
+                <views:PropertiesPanel Grid.Row="2" />
+            </Grid>
 
-            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" />
 
-            <!-- Phần 2B: Vùng hiển thị kết quả xử lý ảnh -->
-            <GroupBox Grid.Column="2" Header="📺 Vùng Kết Quả Xử Lý">
-                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
-                    <TextBlock Text="[ Hiển thị hình ảnh sau khi qua các Vision Tool / Kết quả đo đạc ]" 
-                               HorizontalAlignment="Center" VerticalAlignment="Center" 
-                               Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="15"/>
-                </Border>
-            </GroupBox>
+            <!-- Cột giữa: đồ thị (trên) và các tab Output / Kết nối / Kết quả (dưới) -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="150" />
+                    <RowDefinition Height="4" />
+                    <RowDefinition Height="250" MinHeight="80" />
+                </Grid.RowDefinitions>
+
+                <TabControl Grid.Row="0">
+                    <TabItem Header="Graph1.vgraph">
+                        <views:GraphEditorView />
+                    </TabItem>
+                </TabControl>
+
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
+
+                <TabControl Grid.Row="2">
+                    <TabItem Header="Output">
+                        <!-- Nội dung dưới đây chỉ là chữ mẫu để xem giao diện -->
+                        <TextBox IsReadOnly="True" BorderThickness="0" Background="{StaticResource VsWindowBrush}"
+                                 FontFamily="Consolas" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 Text="[mẫu] Đã mở Graph1.vgraph&#13;&#10;[mẫu] Chạy thử: 4 node, 0 lỗi" />
+                    </TabItem>
+
+                    <TabItem Header="Kết nối">
+                        <views:ConnectionsPanel />
+                    </TabItem>
+
+                    <TabItem Header="Kết quả">
+                        <Grid Background="{StaticResource VsWindowBrush}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Tiêu đề cột bảng kết quả -->
+                            <Border Background="{StaticResource VsPanelHeaderBrush}"
+                                    BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,0,0,1" Padding="8,4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Node" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="Trạng thái" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="2" Text="Thời gian" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="3" Text="Thông điệp" FontWeight="SemiBold" />
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Grid.Row="1" Text="Chưa có kết quả. Nhấn Chạy để thực thi đồ thị."
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{StaticResource VsMutedBrush}" />
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+
+            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch" />
+
+            <!-- Cột phải: ảnh gốc (trên) và ảnh đã xử lý (dưới) -->
+            <Grid Grid.Column="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="120" />
+                    <RowDefinition Height="4" />
+                    <RowDefinition Height="*" MinHeight="120" />
+                </Grid.RowDefinitions>
+                <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" />
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
+                <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" />
+            </Grid>
         </Grid>
-
-        <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource VSDarkBackgroundBrush}"/>
-
-        <!-- ================= 3. CỘT PHẢI: PROPERTY, VIDEO GIỚI THIỆU & LOG ================= -->
-        <Grid Grid.Column="4">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="4"/>
-                <RowDefinition Height="160"/>
-                <RowDefinition Height="4"/>
-                <RowDefinition Height="140"/>
-            </Grid.RowDefinitions>
-
-            <!-- Bảng thuộc tính (Property Inspector - Giống Properties Window của VS) -->
-            <GroupBox Grid.Row="0" Header="⚙️ Properties">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="6">
-                        <TextBlock Text="Chọn một node trên sơ đồ để tinh chỉnh thông số." 
-                                   Foreground="{StaticResource VSGrayTextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
-
-                        <TextBlock Text="Node Name:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
-                        <TextBox Text="Threshold_01" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
-
-                        <TextBlock Text="Threshold Min:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
-                        <TextBox Text="128" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
-
-                        <TextBlock Text="Threshold Max:" FontWeight="SemiBold" Foreground="{StaticResource VSTextBrush}"/>
-                        <TextBox Text="255" Margin="0,2,0,8" Background="{StaticResource VSControlBackgroundBrush}" Foreground="{StaticResource VSTextBrush}" BorderBrush="{StaticResource VSBorderBrush}" Padding="4"/>
-
-                        <Button Content="Apply &amp; Test Run" Margin="0,12,0,0" Padding="10,6" 
-                                Background="{StaticResource VSBlueAccentBrush}" BorderBrush="{StaticResource VSBlueAccentBrush}" FontWeight="SemiBold"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </GroupBox>
-
-            <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
-
-            <!-- Khung màn hình hiển thị Video Giới Thiệu (Phía trên phần Log) -->
-            <GroupBox Grid.Row="2" Header="🎥 Video Giới Thiệu">
-                <Border Background="{StaticResource VSDarkBackgroundBrush}" BorderBrush="{StaticResource VSBorderBrush}" BorderThickness="1">
-                    <!-- Có thể thay thế Border này bằng thẻ <MediaElement Source="..." LoadedBehavior="Play"/> sau này -->
-                    <Grid>
-                        <TextBlock Text="[ Video Mặc Định / Preview ]" 
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" 
-                                   Foreground="{StaticResource VSGrayTextBrush}" FontSize="12"/>
-                    </Grid>
-                </Border>
-            </GroupBox>
-
-            <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" Background="Transparent"/>
-
-            <!-- Khu vực hiện Log (Giống Output Window của VS) -->
-            <GroupBox Grid.Row="4" Header="📋 Output Logs">
-                <TextBox Background="{StaticResource VSDarkBackgroundBrush}" Foreground="#FF4EC9B0" BorderBrush="{StaticResource VSBorderBrush}" 
-                         IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                         Text="[Info] Visual Studio UI layout initialized.&#x0a;[Info] Camera connected (GigE).&#x0a;[Ready] Waiting for execution..." 
-                         Padding="4" FontFamily="Consolas" FontSize="11"/>
-            </GroupBox>
-        </Grid>
-    </Grid>
+    </DockPanel>
 </Window>

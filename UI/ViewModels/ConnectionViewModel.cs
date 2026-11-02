@@ -19,5 +19,9 @@ namespace UI.ViewModels
             Target = target;
         }
 
+        public ConnectionViewModel()
+        {
+        }
+
     }
 }

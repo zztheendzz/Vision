@@ -55,39 +55,49 @@
                 </nodify:NodifyEditor.PendingConnectionTemplate>
 
                 <!-- Node -->
+                <!-- Node Template -->
                 <nodify:NodifyEditor.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:NodeViewModel}">
                         <nodify:Node x:Name="NodeControl"
-                                     Header="{Binding Title}"
-                                     Input="{Binding Inputs}"
-                                     Output="{Binding Outputs}"
-                                     HeaderBrush="#455A64"
-                                     ToolTip="{Binding Message}">
+                     Header="{Binding Title}"
+                     Input="{Binding Inputs}"
+                     Output="{Binding Outputs}"
+                     HeaderBrush="#455A64"
+                     ToolTip="{Binding Message}">
 
                             <nodify:Node.InputConnectorTemplate>
                                 <DataTemplate DataType="{x:Type vm:ConnectorViewModel}">
                                     <nodify:NodeInput Header="{Binding Name}"
-                                                      IsConnected="{Binding IsConnected}"
-                                                      Anchor="{Binding Anchor, Mode=OneWayToSource}"
-                                                      ToolTip="{Binding TypeName}" />
+                                      IsConnected="{Binding IsConnected}"
+                                      Anchor="{Binding Anchor, Mode=OneWayToSource}"
+                                      ToolTip="{Binding TypeName}" />
                                 </DataTemplate>
                             </nodify:Node.InputConnectorTemplate>
 
                             <nodify:Node.OutputConnectorTemplate>
                                 <DataTemplate DataType="{x:Type vm:ConnectorViewModel}">
                                     <nodify:NodeOutput Header="{Binding Name}"
-                                                       IsConnected="{Binding IsConnected}"
-                                                       Anchor="{Binding Anchor, Mode=OneWayToSource}"
-                                                       ToolTip="{Binding TypeName}" />
+                                       IsConnected="{Binding IsConnected}"
+                                       Anchor="{Binding Anchor, Mode=OneWayToSource}"
+                                       ToolTip="{Binding TypeName}" />
                                 </DataTemplate>
                             </nodify:Node.OutputConnectorTemplate>
 
-                            <!-- Thông điệp ngắn của lần chạy gần nhất -->
-                            <TextBlock Text="{Binding Message}" MaxWidth="180"
-                                       TextTrimming="CharacterEllipsis" Margin="6,2" />
+                            <!-- KHU VỰC HIỂN THỊ NỘI DUNG NODE (ẢNH / CONTROL) -->
+                            <StackPanel Margin="6,4">
+                                <!-- Hiển thị ảnh nếu ImagePath không rỗng -->
+
+
+                                <!-- Thông điệp ngắn của lần chạy gần nhất -->
+                                <TextBlock Text="{Binding Message}" 
+                           MaxWidth="180"
+                           TextTrimming="CharacterEllipsis" 
+                           Margin="0,2" />
+                            </StackPanel>
+
                         </nodify:Node>
 
-                        <!-- Màu tiêu đề theo trạng thái chạy -->
+                        <!-- Triggers đổi màu viền / tiêu đề -->
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Status}" Value="Ok">
                                 <Setter TargetName="NodeControl" Property="HeaderBrush" Value="#2E7D32" />

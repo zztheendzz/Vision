@@ -2,8 +2,19 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:UI"
-             StartupUri="View/view.xaml">
+             StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Giao diện tối kiểu Visual Studio -->
+                <ResourceDictionary Source="/View/VsDark.xaml" />
+
+                <!-- Nếu Nodify hiển thị sai màu, bỏ chú thích dòng dưới (hoặc đổi Dark thành Light) -->
+                <!-- <ResourceDictionary Source="pack://application:,,,/Nodify;component/Themes/Dark.xaml" /> -->
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+
+
+
     </Application.Resources>
 </Application>

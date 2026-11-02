@@ -1,13 +1,7 @@
-﻿using System.Text;
+﻿
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using UI.View;
+using UI.ViewModels;
 
 namespace UI
 {
@@ -16,14 +10,44 @@ namespace UI
     /// </summary>
     public partial class MainWindow : Window
     {
+        private readonly MainViewModel _viewModel;
+        private DeviceConfigWindow? _deviceWindow;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            _viewModel = new MainViewModel(new DialogService());
+            DataContext = _viewModel;
+
+            Closed += (_, _) => _viewModel.Dispose();
         }
 
-        private void InitializeComponent()
+        /// <summary>
+        /// Mở cửa sổ cấu hình thiết bị.
+        /// Đã mở rồi thì đưa lên phía trước.
+        /// </summary>
+        public void OpenDeviceConfig()
         {
-            throw new NotImplementedException();
+            if (_deviceWindow != null)
+            {
+                _deviceWindow.Activate();
+                return;
+            }
+
+            _deviceWindow = new DeviceConfigWindow
+            {
+                Owner = this,
+                //DataContext = _viewModel.Devices
+            };
+
+            _deviceWindow.Closed += (_, _) => _deviceWindow = null;
+            _deviceWindow.Show();
+        }
+
+        public void OpenDeviceConfig_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDeviceConfig();
         }
     }
 }

@@ -1,0 +1,37 @@
+﻿<UserControl x:Class="UI.View.ConnectionsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:UI.View"
+             xmlns:views="clr-namespace:UI.View;assembly=UI"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <Border Background="{StaticResource VsWindowBrush}">
+            <DockPanel>
+
+                <!-- Thanh công cụ chung cho mọi kết nối -->
+                <Border DockPanel.Dock="Top" Background="{StaticResource VsPanelHeaderBrush}"
+                    BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,0,0,1" Padding="6,3">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Kết nối tất cả" />
+                        <Button Content="Ngắt tất cả" />
+                        <Button Content="Kiểm tra tất cả" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Danh sách thẻ kết nối: địa chỉ và cổng dưới đây chỉ là giá trị mẫu -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <WrapPanel Margin="4">
+                        <!--  <views:ConnectionCard Title="Robot"   Protocol="TCP/IP"          Badge="RB"  Address="192.168.1.10" Port="9001" />
+                        <views:ConnectionCard Title="PLC"     Protocol="Modbus TCP / S7" Badge="PLC" Address="192.168.1.20" Port="502" />
+                        <views:ConnectionCard Title="PC"      Protocol="TCP/IP"          Badge="PC"  Address="192.168.1.30" Port="8000" />
+                        <views:ConnectionCard Title="Fixture" Protocol="Ethernet / COM"  Badge="FX"  Address="192.168.1.40" Port="5000" />
+                        <views:ConnectionCard Title="Scanner" Protocol="TCP/IP / COM"    Badge="SC"  Address="192.168.1.50" Port="23" />-->
+                    </WrapPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
