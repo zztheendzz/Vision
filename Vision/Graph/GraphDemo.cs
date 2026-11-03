@@ -14,10 +14,10 @@ namespace Vision.Graph
             {
                 using var graph = new VisionGraph();
 
-                var load = graph.AddNode("LoadImage");
-                var thr = graph.AddNode("Threshold");
-                var blobA = graph.AddNode("Blob");
-                var blobB = graph.AddNode("Blob");
+                var load = graph.AddNode("LoadImageTool");
+                var thr = graph.AddNode("ThresholdTool");
+                var blobA = graph.AddNode("BlobTool");
+                var blobB = graph.AddNode("BlobTool");
 
                 // Tham số "thiết kế" của node (lưu vào file graph)
                 load.SetParameter("Path", imagePath);

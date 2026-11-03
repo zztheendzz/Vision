@@ -22,4 +22,13 @@
     <Folder Include="Graph\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="halcondotnet">
+      <HintPath>..\..\..\..\..\..\Program Files\MVTec\HALCON-25.11-Progress\bin\dotnet35\halcondotnet.dll</HintPath>
+    </Reference>
+    <Reference Include="hdevenginedotnet">
+      <HintPath>..\..\..\..\..\..\Program Files\MVTec\HALCON-25.11-Progress\bin\dotnet35\hdevenginedotnet.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>

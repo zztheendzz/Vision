@@ -1,0 +1,163 @@
+﻿using HalconDotNet;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using Vision.Core;
+using Vision.Tools.Bases;
+using Vision.Tools.Registry;
+
+namespace Vision.Tools.Locate
+{
+
+    public enum RoiShape
+    {
+        /// <summary>Chữ nhật song song trục ảnh (bỏ qua Phi).</summary>
+        Rectangle,
+        /// <summary>Chữ nhật xoay một góc Phi.</summary>
+        RotatedRectangle,
+        Circle
+    }
+
+    /// <summary>
+    /// Chọn vùng bằng ROI (vùng quan tâm). ROI mô tả hoàn toàn bằng tham số (hình, tâm, kích thước, góc) nên lưu được
+    /// vào recipe; sau này kéo vẽ trên khung ảnh sẽ chỉ ghi lại các tham số này.
+    ///
+    ///  - Có input Region: Region ra = giao của Region với ROI (chỉ giữ phần nằm trong ROI).
+    ///  - Không có Region: Region ra = chính ROI.
+    ///  - Có input Image: Image ra = ảnh đã thu hẹp miền xử lý về Region ra (các tool sau chỉ xử lý trong ROI).
+    /// Phải có ít nhất một trong hai input. Output nào không có input tương ứng thì không được trả.
+    /// ROI nằm ngoài vùng/ảnh (giao rỗng) → NoResult.
+    /// Tọa độ tính theo pixel, gốc ở góc trên-trái ảnh: Row (hàng) xuống dưới, Column (cột) sang phải.
+    /// </summary>
+    [VisionTool("SelectByRoi", "Select By ROI", Group = "Định vị",
+                Description = "Chỉ giữ phần vùng/ảnh nằm trong ROI (chữ nhật, chữ nhật xoay, tròn)")]
+    public class SelectByRoiTool : PureToolBase
+    {
+        public override IReadOnlyList<PortDef> Inputs { get; } = new[]
+        {
+            new PortDef("Image",  typeof(HImage),  Required: false),
+            new PortDef("Region", typeof(HRegion), Required: false)
+        };
+
+        public override IReadOnlyList<PortDef> Outputs { get; } = new[]
+        {
+            new PortDef("Region", typeof(HRegion)),
+            new PortDef("Image",  typeof(HImage))
+        };
+
+        public override IReadOnlyList<ParamDef> Parameters { get; } = new[]
+        {
+            new ParamDef("Shape",   typeof(RoiShape), RoiShape.Rectangle, Description: "Hình dạng ROI"),
+            new ParamDef("Row",     typeof(double), 240.0, Description: "Hàng của tâm (pixel)"),
+            new ParamDef("Column",  typeof(double), 320.0, Description: "Cột của tâm (pixel)"),
+            new ParamDef("Phi",     typeof(double), 0.0,   Min: -360, Max: 360, Description: "Góc xoay (độ), chỉ dùng cho chữ nhật xoay"),
+            new ParamDef("Length1", typeof(double), 100.0, Min: 0, Description: "Nửa chiều rộng (chữ nhật)"),
+            new ParamDef("Length2", typeof(double), 80.0,  Min: 0, Description: "Nửa chiều cao (chữ nhật)"),
+            new ParamDef("Radius",  typeof(double), 80.0,  Min: 0, Description: "Bán kính (hình tròn)")
+        };
+
+        protected override void ValidateRules(VisionToolInput p, List<string> errors)
+        {
+            var shape = p.Get<RoiShape>("Shape");
+            if (shape == RoiShape.Circle)
+            {
+                if (p.Get<double>("Radius") <= 0) errors.Add("Radius phải lớn hơn 0");
+            }
+            else
+            {
+                if (p.Get<double>("Length1") <= 0) errors.Add("Length1 phải lớn hơn 0");
+                if (p.Get<double>("Length2") <= 0) errors.Add("Length2 phải lớn hơn 0");
+            }
+        }
+
+        protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)
+        {
+            bool hasImage = input.TryGet<HImage>("Image", out var image);
+            bool hasRegion = input.TryGet<HRegion>("Region", out var region);
+            if (!hasImage && !hasRegion)
+                return VisionToolResult.ConfigError("Cần nối ít nhất một input: Image hoặc Region");
+
+            HRegion roi = CreateRoi(input);
+            HRegion final;
+            try
+            {
+                if (hasRegion)
+                {
+                    final = region.Intersection(roi);           // giao: chỉ giữ phần trong ROI
+                    roi.Dispose();                              // ROI chỉ là tạm
+                }
+                else
+                {
+                    final = roi;                                // ROI chính là kết quả
+                }
+            }
+            catch
+            {
+                roi.Dispose();
+                throw;
+            }
+
+            HImage? reduced = null;
+            try
+            {
+                double area = final.CountObj() == 0 ? 0 : final.AreaCenter(out double _, out double _);
+                if (area <= 0)
+                {
+                    final.Dispose();
+                    return VisionToolResult.NoResult("ROI không chứa vùng nào");
+                }
+
+                // Có ảnh thì thu hẹp miền xử lý; ROI ngoài ảnh sẽ được Halcon cắt bớt
+                if (hasImage) reduced = image.ReduceDomain(final);
+
+                var result = VisionToolResult.Ok($"ROI diện tích {area:F0}")
+                    .Add("Region", final);                      // result sở hữu và Dispose
+                if (reduced != null) result.Add("Image", reduced);
+                result.Values["RoiArea"] = area.ToString("F0");
+
+                if (context.NeedDisplay) result.AddDisplay(final.CopyObj(1, -1));
+                return result;
+            }
+            catch
+            {
+                // Chưa giao cho result thì tự giải phóng, không rò rỉ
+                reduced?.Dispose();
+                final.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>Sinh vùng ROI từ tham số. Trả về vùng MỚI, người gọi chịu trách nhiệm Dispose.</summary>
+        private static HRegion CreateRoi(VisionToolInput p)
+        {
+            double row = p.Get<double>("Row");
+            double col = p.Get<double>("Column");
+
+            var roi = new HRegion();
+            try
+            {
+                switch (p.Get<RoiShape>("Shape"))
+                {
+                    case RoiShape.Circle:
+                        roi.GenCircle(row, col, p.Get<double>("Radius"));
+                        break;
+
+                    case RoiShape.RotatedRectangle:
+                        double phi = p.Get<double>("Phi") * Math.PI / 180.0;       // Halcon dùng radian
+                        roi.GenRectangle2(row, col, phi, p.Get<double>("Length1"), p.Get<double>("Length2"));
+                        break;
+
+                    default:                                                        // Rectangle: không xoay
+                        roi.GenRectangle2(row, col, 0.0, p.Get<double>("Length1"), p.Get<double>("Length2"));
+                        break;
+                }
+                return roi;
+            }
+            catch
+            {
+                roi.Dispose();
+                throw;
+            }
+        }
+    }
+}

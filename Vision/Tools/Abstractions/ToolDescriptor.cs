@@ -8,17 +8,20 @@ using Vision.Tools.Abstractions;
 
 namespace Vision.Tools.Abstractions
 {
-    /*
-     sealed record tạo ra một bản ghi (record) không cho phép bất kỳ class hay record nào khác kế thừa (inherit) từ nó.
-     */
-    public sealed record class  ToolDescriptor(
-    string Id,                               // ổn định, nằm trong file lưu
-    string DisplayName,                      // hiển thị, đổi tự do
-    string Group,                            // nhóm trong toolbox
-    ToolKind Kind,                           // Source / Pure / Stateful / Action
-    string Description,
-    IReadOnlyList<PortDef> Inputs,
-    IReadOnlyList<PortDef> Outputs,
-    IReadOnlyList<ParamDef> Parameters,      // ParamKind nằm trong ParamDef
-    Func<IVisionTool> Create);
+    /// <summary>
+    /// Mô tả bất biến của một loại tool: đọc ra một lần lúc đăng ký, UI/toolbox dùng mà không cần tạo tool.
+    /// </summary>
+    public sealed record ToolDescriptor(
+        string Id,
+        string DisplayName,
+        string Group,
+        string Description,
+        ToolKind Kind,
+        Type ToolType,
+        IReadOnlyList<PortDef> Inputs,
+        IReadOnlyList<PortDef> Outputs,
+        IReadOnlyList<ParamDef> Parameters)
+    {
+        public IVisionTool Create() => (IVisionTool)Activator.CreateInstance(ToolType)!;
+    }
 }

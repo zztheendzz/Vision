@@ -4,10 +4,13 @@ using System.Collections.Generic;
 using System.Text;
 using Vision.Core;
 using Vision.Tools.Bases;
+using Vision.Tools.Registry;
 
 namespace Vision.Tools.Locate
 {
+    [VisionTool("BlobTool", "BlobTool", Group = "Tiền xử lý")]
     /// <summary>Đếm vùng liên thông. Count = 0 vẫn là Ok (đây là tool đếm, 0 là một kết quả hợp lệ).</summary>
+
     public class BlobTool : PureToolBase
     {
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]

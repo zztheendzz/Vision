@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.Text;
 using Vision.Core;
 using Vision.Tools.Bases;
+using Vision.Tools.Registry;
 
 namespace Vision.Tools.Locate
 {
+    [VisionTool("ThresholdTool", "ThresholdTool", Group = "Tiền xử lý")]
     public class ThresholdTool : PureToolBase
     {
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]

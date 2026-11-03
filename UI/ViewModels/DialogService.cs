@@ -5,10 +5,13 @@ using System.Windows;
 
 namespace UI.ViewModels
 {
-    public class DialogService : IDialogService
+    public sealed class DialogService : IDialogService
     {
         public void ShowError(string message)
-    => MessageBox.Show(message, "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            => MessageBox.Show(message, "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
 
+        public bool Confirm(string message)
+            => MessageBox.Show(message, "Xác nhận", MessageBoxButton.YesNo, MessageBoxImage.Question)
+               == MessageBoxResult.Yes;
     }
 }

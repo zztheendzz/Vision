@@ -6,49 +6,36 @@
              xmlns:local="clr-namespace:UI.View"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
-    <Grid>
-        <!-- Khung xem ảnh dùng chung cho "Ảnh gốc" và "Ảnh xử lý". Tiêu đề đặt bằng thuộc tính Title. -->
-        <Border Background="{StaticResource VsPanelBrush}">
-            <DockPanel>
+    <!-- Khung xem ảnh dùng chung cho "Ảnh gốc" và "Ảnh xử lý".
+         Title: tiêu đề. Display: ảnh + đối tượng vẽ chồng (ImageDisplay), gắn từ ViewModel.
+         Điều khiển Halcon được tạo bằng code (ImageViewerPanel.xaml.cs). Lăn chuột để phóng to/thu nhỏ, kéo để dời. -->
+    <Border Background="{StaticResource VsPanelBrush}">
+        <DockPanel>
 
-                <!-- Thanh tiêu đề + nút điều khiển -->
-                <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}" Padding="8,2">
-                    <DockPanel>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="Vừa khung" />
-                            <Button Content="1:1" />
-                            <Button Content="+" />
-                            <Button Content="&#8722;" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding Title, ElementName=Root}" VerticalAlignment="Center" />
-                    </DockPanel>
-                </Border>
+            <!-- Thanh tiêu đề -->
+            <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}" Padding="8,2">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="Vừa khung" Click="FitButton_Click" />
+                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center">
+                        <Run Text="{Binding Title, ElementName=Root, Mode=OneWay}" />
+                        <Run Text="{Binding CaptionText, ElementName=Root, Mode=OneWay}"
+                             Foreground="{StaticResource VsMutedBrush}" />
+                    </TextBlock>
+                </DockPanel>
+            </Border>
 
-                <!-- Thanh thông tin dưới cùng: kích thước ảnh, vị trí con trỏ, giá trị điểm ảnh, mức phóng -->
-                <Border DockPanel.Dock="Bottom" Background="{StaticResource VsPanelHeaderBrush}"
+            <!-- Thanh thông tin dưới cùng -->
+            <Border DockPanel.Dock="Bottom" Background="{StaticResource VsPanelHeaderBrush}"
                     BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,0" Padding="8,3">
-                    <StackPanel Orientation="Horizontal" TextElement.Foreground="{StaticResource VsMutedBrush}">
-                        <TextBlock Text="Kích thước: -" />
-                        <TextBlock Text="Row: -   Col: -   Giá trị: -" Margin="16,0,0,0" />
-                        <TextBlock Text="Zoom: 100%" Margin="16,0,0,0" />
-                    </StackPanel>
-                </Border>
+                <StackPanel Orientation="Horizontal" TextElement.Foreground="{StaticResource VsMutedBrush}">
+                    <TextBlock x:Name="SizeText" Text="Kích thước: -" />
+                </StackPanel>
+            </Border>
 
-                <!-- Vùng hiển thị ảnh -->
-                <Grid x:Name="ImageHost" Background="{StaticResource VsImageBgBrush}" ClipToBounds="True">
-                    <!--
-                    Sau này đặt điều khiển Halcon (HSmartWindowControlWPF) vào đây,
-                    ví dụ: ImageHost.Children.Add(...) hoặc khai báo trực tiếp trong XAML.
-                    Hai dòng chữ dưới chỉ là chỗ giữ chỗ, xóa khi có điều khiển thật.
-                -->
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <TextBlock Text="Chưa có ảnh" FontSize="14" HorizontalAlignment="Center"
-                               Foreground="{StaticResource VsMutedBrush}" />
-                        <TextBlock Text="Vùng hiển thị ảnh Halcon" HorizontalAlignment="Center"
-                               Foreground="{StaticResource VsBorderBrush}" Margin="0,4,0,0" />
-                    </StackPanel>
-                </Grid>
-            </DockPanel>
-        </Border>
-    </Grid>
+            <!-- Vùng hiển thị ảnh: điều khiển Halcon được thêm vào đây -->
+            <Grid x:Name="ImageHost" Background="{StaticResource VsImageBgBrush}" ClipToBounds="True" />
+        </DockPanel>
+    </Border>
 </UserControl>

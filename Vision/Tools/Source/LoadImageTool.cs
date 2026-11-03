@@ -5,9 +5,12 @@ using System.IO;
 using System.Text;
 using Vision.Core;
 using Vision.Tools.Bases;
+using Vision.Tools.Registry;
 
 namespace Vision.Tools.Source
 {
+    [VisionTool("LoadImageTool", "LoadImageTool", Group = "ảnh")]
+
     public class LoadImageTool : SourceToolBase
     {
         public override IReadOnlyList<PortDef> Outputs { get; } = new[]

@@ -11,7 +11,10 @@
              d:DesignHeight="450" d:DesignWidth="800">
     <Grid>
         <!-- Trình soạn thảo đồ thị. DataContext là MainViewModel (kế thừa từ MainWindow). -->
-        <nodify:NodifyEditor ItemsSource="{Binding Editor.Nodes}"
+        <!-- Trình soạn thảo đồ thị. DataContext là MainViewModel (kế thừa từ MainWindow). -->
+        <nodify:NodifyEditor x:Name="GraphCanvas" AllowDrop="True"
+                         DragOver="Canvas_DragOver" Drop="Canvas_Drop"
+                         ItemsSource="{Binding Editor.Nodes}"
                          Connections="{Binding Editor.Connections}"
                          SelectedItems="{Binding Editor.SelectedNodes}"
                          PendingConnection="{Binding Editor.PendingConnection}"
@@ -25,13 +28,15 @@
 
             <nodify:NodifyEditor.ConnectionTemplate>
                 <DataTemplate DataType="{x:Type vm:ConnectionViewModel}">
-                    <nodify:Connection Source="{Binding Source.Anchor}" Target="{Binding Target.Anchor}" />
+                    <nodify:Connection Source="{Binding Source.Anchor}"
+                                   Target="{Binding Target.Anchor}" />
                 </DataTemplate>
             </nodify:NodifyEditor.ConnectionTemplate>
 
             <nodify:NodifyEditor.PendingConnectionTemplate>
                 <DataTemplate DataType="{x:Type vm:PendingConnectionViewModel}">
-                    <nodify:PendingConnection StartedCommand="{Binding StartCommand}" CompletedCommand="{Binding CompleteCommand}" />
+                    <nodify:PendingConnection StartedCommand="{Binding StartCommand}"
+                                          CompletedCommand="{Binding CompleteCommand}" />
                 </DataTemplate>
             </nodify:NodifyEditor.PendingConnectionTemplate>
 

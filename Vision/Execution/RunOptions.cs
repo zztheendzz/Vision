@@ -5,35 +5,43 @@ using Vision.Core;
 using Vision.Graph;
 namespace Vision.Execution
 {
-        /// <summary>
-        /// Thứ người ngoài truyền vào cho MỘT lần chạy. Không sửa node, không lưu lại.
-        ///  - Seed: dữ liệu đầu vào chung (ví dụ ảnh từ camera, mã sản phẩm), mọi node đều thấy.
-        ///  - Tham số ghi đè theo từng node (ví dụ đổi MinArea theo loại sản phẩm).
-        /// Thứ tự ưu tiên: Seed &lt; tham số node &lt; tham số ghi đè &lt; dữ liệu từ dây nối.
-        /// </summary>
-        public class RunOptions
+    /// <summary>
+    /// Thứ người ngoài truyền vào cho MỘT lần chạy. Không sửa node, không lưu lại.
+    ///  - Mode: chạy thử hay chạy thật (tool có tác dụng phụ chỉ hoạt động khi Live).
+    ///  - NeedDisplay: có tạo dữ liệu hiển thị cho từng node không.
+    ///  - Seed: dữ liệu đầu vào chung (ví dụ ảnh từ camera, mã sản phẩm), mọi node đều thấy.
+    ///  - Tham số ghi đè theo từng node (ví dụ đổi MinArea theo loại sản phẩm).
+    /// Thứ tự ưu tiên: Seed &lt; tham số node &lt; tham số ghi đè &lt; dữ liệu từ dây nối.
+    /// </summary>
+    public class RunOptions
+    {
+        internal Dictionary<Guid, Dictionary<string, object?>> Overrides { get; } = new();
+
+        /// <summary>Mặc định là chạy thử (an toàn). Muốn tác động thật phải đặt Live rõ ràng.</summary>
+        public RunMode Mode { get; set; } = RunMode.DryRun;
+
+        /// <summary>true: tool tạo bản copy để hiển thị (khi chỉnh/thử). false: bỏ qua cho nhanh (khi sản xuất).</summary>
+        public bool NeedDisplay { get; set; } = true;
+
+        public VisionToolInput Seed { get; } = new();
+
+        public RunOptions SetSeed<T>(string key, T value)
         {
-            internal Dictionary<Guid, Dictionary<string, object?>> Overrides { get; } = new();
+            Seed.Add(key, value);
+            return this;
+        }
 
-            public VisionToolInput Seed { get; } = new();
+        /// <summary>Ghi đè tham số cho lần chạy này. Kiểm tra tên/kiểu/khoảng ngay (fail fast).</summary>
+        public RunOptions SetParameter(VisionNode node, string name, object? value)
+        {
+            var def = node.Tool.Parameters.FirstOrDefault(p => p.Name == name)
+                ?? throw new ArgumentException($"{node.ToolName} không có tham số '{name}'");
 
-            public RunOptions SetSeed<T>(string key, T value)
-            {
-                Seed.Add(key, value);
-                return this;
-            }
-
-            /// <summary>Ghi đè tham số cho lần chạy này. Kiểm tra tên/kiểu/khoảng ngay (fail fast).</summary>
-            public RunOptions SetParameter(VisionNode node, string name, object? value)
-            {
-                var def = node.Tool.Parameters.FirstOrDefault(p => p.Name == name)
-                    ?? throw new ArgumentException($"{node.ToolName} không có tham số '{name}'");
-
-                if (!Overrides.TryGetValue(node.Id, out var dict))
-                    Overrides[node.Id] = dict = new();
-                dict[name] = def.Coerce(value);
-                return this;
-            }
+            if (!Overrides.TryGetValue(node.Id, out var dict))
+                Overrides[node.Id] = dict = new();
+            dict[name] = def.Coerce(value);
+            return this;
         }
     }
+}
 

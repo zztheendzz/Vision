@@ -4,41 +4,48 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:UI.View"
+             xmlns:vm="clr-namespace:UI.ViewModels"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
-    <Grid>
+    <UserControl.Resources>
+        <!-- Cho các nhóm tự mở sẵn -->
+        <Style x:Key="GroupItemStyle" TargetType="{x:Type TreeViewItem}"
+               BasedOn="{StaticResource {x:Type TreeViewItem}}">
+            <Setter Property="IsExpanded" Value="True" />
+        </Style>
+    </UserControl.Resources>
 
-        <Border Background="{StaticResource VsPanelBrush}">
-            <DockPanel>
+    <Border Background="{StaticResource VsPanelBrush}">
+        <DockPanel>
 
-                <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}">
-                    <TextBlock Text="Toolbox" />
-                </Border>
+            <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}">
+                <TextBlock Text="Toolbox" />
+            </Border>
 
-                <!-- Ô tìm kiếm tool -->
-                <TextBox DockPanel.Dock="Top" Margin="6" ToolTip="Tìm tool..." />
+            <TextBox DockPanel.Dock="Top" Margin="6" ToolTip="Tìm tool..."
+                     Text="{Binding Toolbox.SearchText, UpdateSourceTrigger=PropertyChanged}" />
 
-                <!-- Danh sách tool theo nhóm. Sau này kéo thả từng mục vào đồ thị để tạo node. -->
-                <TreeView Margin="0,0,0,4">
-                    <TreeViewItem Header="Nguồn ảnh" IsExpanded="True">
-                        <TreeViewItem Header="LoadImage" />
-                        <TreeViewItem Header="ImageSource" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Tiền xử lý" IsExpanded="True">
-                        <TreeViewItem Header="Threshold" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Định vị" IsExpanded="True">
-                        <TreeViewItem Header="Blob" />
-                        <TreeViewItem Header="FindObject" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Biến đổi" IsExpanded="True">
-                        <TreeViewItem Header="PixelToRobot" />
-                    </TreeViewItem>
-                    <TreeViewItem Header="Hành động" IsExpanded="True">
-                        <TreeViewItem Header="SendRobot" />
-                    </TreeViewItem>
-                </TreeView>
-            </DockPanel>
-        </Border>
-    </Grid>
+            <TextBlock DockPanel.Dock="Bottom" Margin="8,4,8,8" TextWrapping="Wrap"
+                       Foreground="{StaticResource VsMutedBrush}"
+                       Text="Kéo một tool thả vào đồ thị để tạo node." />
+
+            <!-- Danh sách tool theo nhóm. Kéo một tool (không phải tên nhóm) sang đồ thị để tạo node. -->
+            <TreeView x:Name="Tree"
+                      ItemsSource="{Binding Toolbox.Groups}"
+                      ItemContainerStyle="{StaticResource GroupItemStyle}"
+                      PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                      PreviewMouseMove="Tree_PreviewMouseMove">
+                <TreeView.Resources>
+                    <HierarchicalDataTemplate DataType="{x:Type vm:ToolboxGroupViewModel}"
+                                              ItemsSource="{Binding Items}">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                    </HierarchicalDataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:ToolboxItemViewModel}">
+                        <TextBlock Text="{Binding DisplayName}" ToolTip="{Binding Description}" />
+                    </DataTemplate>
+                </TreeView.Resources>
+            </TreeView>
+        </DockPanel>
+    </Border>
 </UserControl>
