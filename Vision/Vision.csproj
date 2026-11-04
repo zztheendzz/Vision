@@ -21,6 +21,7 @@
     <Folder Include="Tools\Action\" />
     <Folder Include="Tools\Transform\" />
     <Folder Include="Tools\Preprocess\" />
+    <Folder Include="Transform\" />
   </ItemGroup>
 
 </Project>

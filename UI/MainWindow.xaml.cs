@@ -1,11 +1,13 @@
 ﻿
+using Communication.Configuration;
 using System.Windows;
 using UI.View;
 using UI.ViewModels;
+using Vision.Graph;
 
 namespace UI
 {
-    public partial class MainWindow : Window
+ public partial class MainWindow : Window
     {
         private readonly MainViewModel _viewModel;
         private DeviceConfigWindow? _deviceWindow;

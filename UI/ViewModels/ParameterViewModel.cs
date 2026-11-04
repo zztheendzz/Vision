@@ -15,6 +15,9 @@ namespace UI.ViewModels
     {
         protected VisionNode Node { get; }
 
+        /// <summary>Báo khi người dùng nhập một giá trị hợp lệ và đã được ghi vào node.</summary>
+        public event EventHandler? ValueApplied;
+
         public string Name { get; }
         public string Description { get; }
 
@@ -29,6 +32,9 @@ namespace UI.ViewModels
             Description = definition.Description ?? "";
         }
 
+        /// <summary>Đọc lại giá trị từ node (khi node bị đổi từ nơi khác, ví dụ kéo ROI trên ảnh). Không ghi ngược vào node.</summary>
+        public abstract void Reload();
+
         /// <summary>Đặt giá trị vào node. Sai thì hiện lỗi và node vẫn giữ giá trị cũ.</summary>
         protected bool TrySetValue(object? value)
         {
@@ -36,6 +42,7 @@ namespace UI.ViewModels
             {
                 Node.SetParameter(Name, value);
                 ErrorMessage = "";
+                ValueApplied?.Invoke(this, EventArgs.Empty);
                 return true;
             }
             catch (ArgumentException ex)

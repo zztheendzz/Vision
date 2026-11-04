@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Vision.Core;
+using Vision.Tools.Abstractions;
 using Vision.Tools.Bases;
 using Vision.Tools.Registry;
 
@@ -31,7 +32,7 @@ namespace Vision.Tools.Locate
     /// </summary>
     [VisionTool("SelectByRoi", "Select By ROI", Group = "Định vị",
                 Description = "Chỉ giữ phần vùng/ảnh nằm trong ROI (chữ nhật, chữ nhật xoay, tròn)")]
-    public class SelectByRoiTool : PureToolBase
+    public class SelectByRoiTool : PureToolBase, IRoiEditable
     {
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]
         {
@@ -45,30 +46,10 @@ namespace Vision.Tools.Locate
             new PortDef("Image",  typeof(HImage))
         };
 
-        public override IReadOnlyList<ParamDef> Parameters { get; } = new[]
-        {
-            new ParamDef("Shape",   typeof(RoiShape), RoiShape.Rectangle, Description: "Hình dạng ROI"),
-            new ParamDef("Row",     typeof(double), 240.0, Description: "Hàng của tâm (pixel)"),
-            new ParamDef("Column",  typeof(double), 320.0, Description: "Cột của tâm (pixel)"),
-            new ParamDef("Phi",     typeof(double), 0.0,   Min: -360, Max: 360, Description: "Góc xoay (độ), chỉ dùng cho chữ nhật xoay"),
-            new ParamDef("Length1", typeof(double), 100.0, Min: 0, Description: "Nửa chiều rộng (chữ nhật)"),
-            new ParamDef("Length2", typeof(double), 80.0,  Min: 0, Description: "Nửa chiều cao (chữ nhật)"),
-            new ParamDef("Radius",  typeof(double), 80.0,  Min: 0, Description: "Bán kính (hình tròn)")
-        };
+        public override IReadOnlyList<ParamDef> Parameters { get; } = RoiRegionFactory.ParamDefs();
 
         protected override void ValidateRules(VisionToolInput p, List<string> errors)
-        {
-            var shape = p.Get<RoiShape>("Shape");
-            if (shape == RoiShape.Circle)
-            {
-                if (p.Get<double>("Radius") <= 0) errors.Add("Radius phải lớn hơn 0");
-            }
-            else
-            {
-                if (p.Get<double>("Length1") <= 0) errors.Add("Length1 phải lớn hơn 0");
-                if (p.Get<double>("Length2") <= 0) errors.Add("Length2 phải lớn hơn 0");
-            }
-        }
+            => RoiRegionFactory.Validate(p, errors);
 
         protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)
         {
@@ -77,7 +58,7 @@ namespace Vision.Tools.Locate
             if (!hasImage && !hasRegion)
                 return VisionToolResult.ConfigError("Cần nối ít nhất một input: Image hoặc Region");
 
-            HRegion roi = CreateRoi(input);
+            HRegion roi = RoiRegionFactory.Create(input);
             HRegion final;
             try
             {
@@ -123,39 +104,6 @@ namespace Vision.Tools.Locate
                 // Chưa giao cho result thì tự giải phóng, không rò rỉ
                 reduced?.Dispose();
                 final.Dispose();
-                throw;
-            }
-        }
-
-        /// <summary>Sinh vùng ROI từ tham số. Trả về vùng MỚI, người gọi chịu trách nhiệm Dispose.</summary>
-        private static HRegion CreateRoi(VisionToolInput p)
-        {
-            double row = p.Get<double>("Row");
-            double col = p.Get<double>("Column");
-
-            var roi = new HRegion();
-            try
-            {
-                switch (p.Get<RoiShape>("Shape"))
-                {
-                    case RoiShape.Circle:
-                        roi.GenCircle(row, col, p.Get<double>("Radius"));
-                        break;
-
-                    case RoiShape.RotatedRectangle:
-                        double phi = p.Get<double>("Phi") * Math.PI / 180.0;       // Halcon dùng radian
-                        roi.GenRectangle2(row, col, phi, p.Get<double>("Length1"), p.Get<double>("Length2"));
-                        break;
-
-                    default:                                                        // Rectangle: không xoay
-                        roi.GenRectangle2(row, col, 0.0, p.Get<double>("Length1"), p.Get<double>("Length2"));
-                        break;
-                }
-                return roi;
-            }
-            catch
-            {
-                roi.Dispose();
                 throw;
             }
         }

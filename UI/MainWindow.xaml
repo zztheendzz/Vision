@@ -8,7 +8,7 @@
         Title="Vision Tool Editor - Visual Studio Style"
         Style="{StaticResource VsWindow}"
         xmlns:views="clr-namespace:UI.View" 
-        xmlns:viewmodels="clr-namespace:UI.ViewModels" d:DataContext="{d:DesignInstance Type=viewmodels:RunViewModel}"
+        xmlns:viewmodels="clr-namespace:UI.ViewModels" d:DataContext="{d:DesignInstance Type=ViewModels:RunViewModel}"
         Height="850"
         Width="1450"
         Background="#FF2D2D30"
@@ -54,11 +54,12 @@
             </MenuItem>
             <MenuItem Header="_Dự án">
                 <MenuItem Header="Công thức (Recipe)..." />
-                <MenuItem Header="Hiệu chuẩn camera - robot..." />
+                <MenuItem Header="Hiệu chuẩn camera - robot (từ CSV)..." Command="{Binding CalibrateFromCsvCommand}" />
                 <MenuItem Header="Thư mục ảnh mẫu..." />
             </MenuItem>
             <MenuItem Header="_Chạy">
                 <MenuItem Header="Chạy một lần" InputGestureText="F5" Command="{Binding Run.RunOnceCommand}" />
+                <MenuItem Header="Học mẫu" Command="{Binding Run.TeachCommand}" />
                 <MenuItem Header="Chạy liên tục" InputGestureText="Ctrl+F5" />
                 <MenuItem Header="Dừng" InputGestureText="Shift+F5" Command="{Binding Run.StopCommand}" />
                 <Separator />
@@ -95,6 +96,7 @@
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
                 <Button Content="&#9654; Chạy một lần" Command="{Binding Run.RunOnceCommand}" />
+                <Button Content="Học mẫu" Command="{Binding Run.TeachCommand}" />
                 <Button Content="&#10227; Chạy liên tục" />
                 <Button Content="&#9632; Dừng" Command="{Binding Run.StopCommand}" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
@@ -276,7 +278,8 @@
                     <RowDefinition Height="4" />
                     <RowDefinition Height="*" MinHeight="120" />
                 </Grid.RowDefinitions>
-                <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" Display="{Binding Run.Original}" />
+                <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" Display="{Binding Run.Original}"
+                                       Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
                 <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
                 <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}" />
             </Grid>

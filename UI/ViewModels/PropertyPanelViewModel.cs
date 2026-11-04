@@ -18,6 +18,15 @@ namespace UI.ViewModels
     {
         public ObservableCollection<ParameterViewModel> Parameters { get; } = new();
 
+        /// <summary>Người dùng vừa sửa một tham số trên bảng (hợp lệ, đã ghi vào node).</summary>
+        public event EventHandler? ParameterEdited;
+
+        /// <summary>Đọc lại mọi giá trị từ node, khi node bị đổi từ nơi khác (kéo ROI). Không bắn ParameterEdited.</summary>
+        public void ReloadValues()
+        {
+            foreach (var p in Parameters) p.Reload();
+        }
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasNode))]
         [NotifyPropertyChangedFor(nameof(HasNoParameters))]
@@ -39,7 +48,11 @@ namespace UI.ViewModels
             if (value != null)
             {
                 foreach (var definition in value.Model.Tool.Parameters)
-                    Parameters.Add(CreateEditor(value.Model, definition));
+                {
+                    var editor = CreateEditor(value.Model, definition);
+                    editor.ValueApplied += (_, _) => ParameterEdited?.Invoke(this, EventArgs.Empty);
+                    Parameters.Add(editor);
+                }
             }
 
             OnPropertyChanged(nameof(HasNoParameters));

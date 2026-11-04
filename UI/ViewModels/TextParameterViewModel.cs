@@ -25,7 +25,16 @@ namespace UI.ViewModels
         public TextParameterViewModel(VisionNode node, ParamDef definition) : base(node, definition)
         {
             // Số được hiển thị với dấu chấm thập phân (ví dụ 1.5), không phụ thuộc cài đặt ngôn ngữ của máy
-            _text = Convert.ToString(node.Parameters[definition.Name], CultureInfo.InvariantCulture) ?? "";
+            _text = Read();
         }
+
+        public override void Reload()
+        {
+            SetProperty(ref _text, Read(), nameof(Text));      // gán trường: không đi qua setter nên không ghi ngược
+            ErrorMessage = "";
+        }
+
+        private string Read()
+            => Convert.ToString(Node.Parameters[Name], CultureInfo.InvariantCulture) ?? "";
     }
 }

@@ -47,6 +47,7 @@ namespace UI.ViewModels
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RunOnceCommand))]
+        [NotifyCanExecuteChangedFor(nameof(TeachCommand))]
         [NotifyCanExecuteChangedFor(nameof(StopCommand))]
         private bool _isRunning;
 
@@ -107,7 +108,20 @@ namespace UI.ViewModels
         private bool CanStop() => IsRunning;
 
         [RelayCommand(CanExecute = nameof(CanRun))]
-        private async Task RunOnceAsync()
+        private Task RunOnceAsync() => RunCoreAsync(Mode);
+
+        /// <summary>
+        /// Học mẫu: chạy một lần ở chế độ Teach. Tool học (vd FindShape) tạo và ghi file mẫu; tool Action không tác động ra ngoài.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanRun))]
+        private Task TeachAsync()
+        {
+            if (!_dialogs.Confirm("Học mẫu sẽ GHI ĐÈ file mẫu hiện có của các tool học (vd FindShape).\nĐặt vật đúng vị trí mẫu trước khi tiếp tục. Tiếp tục?"))
+                return Task.CompletedTask;
+            return RunCoreAsync(RunMode.Teach);
+        }
+
+        private async Task RunCoreAsync(RunMode mode)
         {
             var graph = _editor.Model;
             if (graph.Nodes.Count == 0)
@@ -126,12 +140,12 @@ namespace UI.ViewModels
             _editor.ResetRunState();
             StatusText = "Đang chạy...";
 
-            var options = new RunOptions { Mode = Mode, NeedDisplay = true };
+            var options = new RunOptions { Mode = mode, NeedDisplay = true };
             var logger = new UiLogger(PostLog);
             var executor = new GraphExecutor(logger);
             executor.NodeFinished += OnNodeFinished;
 
-            AppendLog($"--- Chạy {DateTime.Now:HH:mm:ss} ({ModeText}) ---");
+            AppendLog($"--- {(mode == RunMode.Teach ? "Học mẫu" : "Chạy")} {DateTime.Now:HH:mm:ss} ({ModeName(mode)}) ---");
             var sw = Stopwatch.StartNew();
 
             try
@@ -173,6 +187,13 @@ namespace UI.ViewModels
                 IsRunning = false;
             }
         }
+
+        private static string ModeName(RunMode mode) => mode switch
+        {
+            RunMode.Live => "chạy thật",
+            RunMode.Teach => "học mẫu",
+            _ => "chạy thử"
+        };
 
         /// <summary>Dừng giữa các node (một node đang chạy dở thì chạy nốt rồi mới dừng).</summary>
         [RelayCommand(CanExecute = nameof(CanStop))]
