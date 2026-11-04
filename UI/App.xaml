@@ -7,7 +7,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!-- Giao diện tối kiểu Visual Studio -->
-                <ResourceDictionary Source="/View/VsDark.xaml" />
+                <ResourceDictionary Source="/Views/VsDark.xaml" />
 
                 <!-- Nếu Nodify hiển thị sai màu, bỏ chú thích dòng dưới (hoặc đổi Dark thành Light) -->
                 <!-- <ResourceDictionary Source="pack://application:,,,/Nodify;component/Themes/Dark.xaml" /> -->

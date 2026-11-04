@@ -41,4 +41,17 @@ namespace Vision.Geometry
     {
         public override string ToString() => $"(dX {Dx:F3}, dY {Dy:F3}, dRz {Drz:F3}°)";
     }
+
+
+    /// <summary>
+    /// Độ bù để robot gắp đúng khi vật lệch so với lúc dạy (đơn vị mm, độ), trong hệ tọa độ robot.
+    /// Ý nghĩa phụ thuộc quy ước (xem PickCompensationTool):
+    ///  - Quanh gốc hệ robot : điểm bất kỳ P được bù thành  P' = R(Drz)·P + (Dx, Dy).
+    ///  - Quanh điểm mẫu     : (Dx, Dy) = tâm vật hiện tại trừ tâm vật lúc dạy; điểm P được bù thành  P' = O_now + R(Drz)·(P - O_ref).
+    /// R(a) là phép xoay ngược chiều kim đồng hồ góc a.
+    /// </summary>
+    public readonly record struct RobotOffset(double Dx, double Dy, double Drz)
+    {
+        public override string ToString() => $"(dX {Dx:F3}, dY {Dy:F3}, dRz {Drz:F3}°)";
+    }
 }

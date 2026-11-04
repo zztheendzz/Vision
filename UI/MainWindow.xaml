@@ -7,8 +7,9 @@
         mc:Ignorable="d"
         Title="Vision Tool Editor - Visual Studio Style"
         Style="{StaticResource VsWindow}"
-        xmlns:views="clr-namespace:UI.View" 
-        xmlns:viewmodels="clr-namespace:UI.ViewModels" d:DataContext="{d:DesignInstance Type=ViewModels:RunViewModel}"
+        xmlns:views="clr-namespace:UI.Views" 
+        xmlns:viewmodels="clr-namespace:UI.ViewModels"
+        d:DataContext="{d:DesignInstance Type=viewmodels:MainViewModel}"
         Height="850"
         Width="1450"
         Background="#FF2D2D30"
@@ -111,11 +112,11 @@
             </StackPanel>
         </Border>
 
-        <!-- ================= THANH TRẠNG THÁI (xanh như Visual Studio) ================= -->
+        <!-- ================= THANH TRẠNG THÁI ================= -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource VsAccentBrush}" Padding="10,3">
             <DockPanel TextElement.Foreground="White">
 
-                <!-- Tình trạng từng kết nối: xám là chưa kết nối -->
+                <!-- Tình trạng từng kết nối -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <ItemsControl ItemsSource="{Binding Devices.Devices}">
                         <ItemsControl.ItemsPanel>
@@ -138,6 +139,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <!-- Sửa lỗi bindingDataContext bên trong ItemsControl bằng cách gọi qua MainViewModel trực tiếp -->
                     <TextBlock Text="{Binding Run.ModeText}" Margin="20,0,0,0" />
                 </StackPanel>
 
@@ -187,7 +189,6 @@
 
                 <TabControl Grid.Row="2">
                     <TabItem Header="Output">
-                        <!-- Nội dung dưới đây chỉ là chữ mẫu để xem giao diện -->
                         <TextBox IsReadOnly="True" BorderThickness="0" Background="{StaticResource VsWindowBrush}"
                                  FontFamily="Consolas" AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
@@ -279,7 +280,7 @@
                     <RowDefinition Height="*" MinHeight="120" />
                 </Grid.RowDefinitions>
                 <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" Display="{Binding Run.Original}"
-                                       Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
+                                        Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
                 <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
                 <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}" />
             </Grid>

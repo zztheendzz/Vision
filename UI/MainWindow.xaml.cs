@@ -1,9 +1,10 @@
 ﻿
 using Communication.Configuration;
 using System.Windows;
-using UI.View;
+using UI.Services;
 using UI.ViewModels;
-using Vision.Graph;
+using UI.Views;
+
 
 namespace UI
 {
