@@ -1,40 +1,117 @@
 ﻿using Communication.Configuration;
-using Communication.Connection;
+using Communication.Drivers;
+using Communication.Transport;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using UI.ViewModels.RunAndDisplay;
 using Vision.Graph;
 
 namespace UI.ViewModels.Device
 {
     /// <summary>
-    /// Một thiết bị trên giao diện: các ô cấu hình + trạng thái kết nối + các lệnh Kết nối / Ngắt / Gửi thử.
-    /// Các ô được sửa tự do; chỉ khi bấm Kết nối thì mới đọc giá trị hiện tại để tạo kết nối mới.
+    /// Một thiết bị trên giao diện: tên (đổi được), bật/tắt, PLC nguồn, các ô thuộc tính sinh từ schema,
+    /// và trạng thái kết nối. Sửa là sửa thẳng vào DeviceConfig trong catalog; lưu file là việc của DeviceConfigViewModel.
     /// </summary>
     public partial class DeviceViewModel : ViewModelBase, IDisposable
     {
-        private DeviceConnection? _connection;
+        private readonly DeviceCatalog _catalog;
+        private readonly DeviceConfigViewModel _owner;
 
-        public Guid Id { get; }
+        public DeviceConfig Config { get; }
 
-        // ---------- Cấu hình (người dùng sửa được) ----------
-        [ObservableProperty] private string _name = "";
-        [ObservableProperty] private DeviceType _type;
-        [ObservableProperty] private string _ipAddress = "";
-        [ObservableProperty] private int _port;
-        [ObservableProperty] private int _timeoutMs = 3000;
-        [ObservableProperty] private bool _autoConnect;
-        [ObservableProperty] private string _textEncoding = "ASCII";
+        public IReadOnlyList<FieldViewModel> Fields { get; }
 
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(IsCustomTerminator))]
-        [NotifyPropertyChangedFor(nameof(TerminatorPreview))]
-        private TerminatorKind _terminator;
+        public DeviceViewModel(DeviceConfig config, DeviceCatalog catalog, DeviceConfigViewModel owner)
+        {
+            Config = config;
+            _catalog = catalog;
+            _owner = owner;
 
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(TerminatorPreview))]
-        private string _customTerminator = "";
+            var schema = DeviceSchemas.For(config.Type);
+            Fields = schema.DeviceFields
+                .Select(def => new FieldViewModel(
+                    def,
+                    () => config.GetString(def.Key),
+                    v => config.Set(def.Key, v),
+                    () =>
+                    {
+                        foreach (var f in Fields) f.RefreshVisibility();   // đổi Hãng / Kiểu truyền thông thì ẩn-hiện ô liên quan
+                        OnPropertyChanged(nameof(Summary));
+                        OnPropertyChanged(nameof(CanConnect));
+                        _owner.MarkDirty();
+                    },
+                    config.GetString))
+                .ToList();
+        }
+
+        public Guid Id => Config.Id;
+        public DeviceType Type => Config.Type;
+        public string TypeName => DeviceSchemas.For(Config.Type).DisplayName;
+        public bool HasPlcSource => DeviceSchemas.For(Config.Type).HasPlcSource;
+        public bool IsPlc => Config.Type == DeviceType.PLC;
+
+        // ---------- Tên ----------
+
+        [ObservableProperty] private string _nameError = "";
+
+        /// <summary>Đổi tên. Tên rỗng hoặc trùng bị từ chối: giữ tên cũ và hiện lỗi.</summary>
+        public string Name
+        {
+            get => Config.Name;
+            set
+            {
+                string? error = _catalog.CheckName(Config, value);
+                if (error != null)
+                {
+                    NameError = error;
+                    // Báo thay đổi sau khi lượt cập nhật hiện tại xong, để ô nhập chắc chắn quay về tên cũ
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+                        new Action(() => OnPropertyChanged(nameof(Name))));
+                    return;
+                }
+
+                NameError = "";
+                string newName = value.Trim();
+                if (Config.Name == newName) return;
+                Config.Name = newName;
+                OnPropertyChanged(nameof(Name));
+                _owner.MarkDirty();
+            }
+        }
+
+        public bool Enabled
+        {
+            get => Config.Enabled;
+            set
+            {
+                if (Config.Enabled == value) return;
+                Config.Enabled = value;
+                OnPropertyChanged(nameof(Enabled));
+                OnPropertyChanged(nameof(Summary));
+                if (!value) Disconnect();
+                _owner.MarkDirty();
+            }
+        }
+
+        // ---------- PLC nguồn ----------
+
+        /// <summary>PLC đang được chọn làm nguồn (null: chưa chọn). Danh sách lựa chọn là _owner.Plcs.</summary>
+        public DeviceViewModel? SourcePlc
+        {
+            get => Config.SourcePlcId is Guid id ? _owner.Plcs.FirstOrDefault(p => p.Id == id) : null;
+            set
+            {
+                if (value?.Id == Config.SourcePlcId) return;
+                Config.SourcePlcId = value?.Id;
+                OnPropertyChanged(nameof(SourcePlc));
+                _owner.MarkDirty();
+            }
+        }
+
+        public void RefreshSourcePlc() => OnPropertyChanged(nameof(SourcePlc));
 
         // ---------- Trạng thái ----------
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(StatusText))]
         private bool _isConnected;
@@ -44,63 +121,37 @@ namespace UI.ViewModels.Device
 
         public string StatusText => IsConnected ? "Đã kết nối" : "Chưa kết nối";
 
-        /// <summary>Chỉ hiện ô gõ ký tự tùy chọn khi chọn Custom.</summary>
-        public bool IsCustomTerminator => Terminator == TerminatorKind.Custom;
+        /// <summary>Một dòng tóm tắt cho thẻ trong tab Kết nối.</summary>
+        public string Summary => DeviceFactory.Describe(_catalog, Config);
 
-        /// <summary>Các byte của ký tự kết thúc, ví dụ "0D 0A". Để người dùng kiểm tra đã đúng ý chưa.</summary>
-        public string TerminatorPreview
-        {
-            get
-            {
-                byte[] bytes = ToConfig().GetTerminatorBytes();
-                return bytes.Length == 0 ? "(không có)" : BitConverter.ToString(bytes).Replace("-", " ");
-            }
-        }
-
-        public DeviceViewModel(DeviceConfig config)
-        {
-            Id = config.Id;
-            _name = config.Name;
-            _type = config.Type;
-            _ipAddress = config.IpAddress;
-            _port = config.Port;
-            _timeoutMs = config.TimeoutMs;
-            _autoConnect = config.AutoConnect;
-            _textEncoding = config.TextEncoding;
-            _terminator = config.Terminator;
-            _customTerminator = config.CustomTerminator;
-        }
-
-        /// <summary>Đóng gói các ô hiện tại thành DeviceConfig (để lưu file hoặc tạo kết nối).</summary>
-        public DeviceConfig ToConfig() => new DeviceConfig
-        {
-            Id = Id,
-            Name = Name,
-            Type = Type,
-            IpAddress = IpAddress,
-            Port = Port,
-            TimeoutMs = TimeoutMs,
-            AutoConnect = AutoConnect,
-            TextEncoding = TextEncoding,
-            Terminator = Terminator,
-            CustomTerminator = CustomTerminator
-        };
+        /// <summary>Có đường kết nối TCP để bấm Kết nối không.</summary>
+        public bool CanConnect => DeviceFactory.CanConnect(_catalog, Config);
 
         // ---------- Lệnh ----------
 
         [RelayCommand]
         private async Task ConnectAsync()
         {
+            if (!Config.Enabled)
+            {
+                Message = "Thiết bị đang tắt";
+                return;
+            }
+
             try
             {
-                _connection?.Dispose();
-                _connection = new DeviceConnection(ToConfig());
-
                 Message = "Đang kết nối...";
-                await _connection.ConnectAsync();
+                string? description = await _owner.Manager.ConnectAsync(Config);
 
-                IsConnected = _connection.IsConnected;
-                Message = IsConnected ? "Kết nối thành công" : "Không kết nối được";
+                if (description == null)
+                {
+                    IsConnected = false;
+                    Message = "Thiết bị này không có gì để nối (thông số chưa đủ)";
+                    return;
+                }
+
+                IsConnected = _owner.Manager.IsConnected(Id);
+                Message = IsConnected ? $"Kết nối thành công ({description})" : "Không kết nối được";
             }
             catch (Exception ex)
             {
@@ -112,8 +163,7 @@ namespace UI.ViewModels.Device
         [RelayCommand]
         private void Disconnect()
         {
-            _connection?.Dispose();
-            _connection = null;
+            _owner.Manager.Disconnect(Id);
             IsConnected = false;
             Message = "Đã ngắt kết nối";
         }
@@ -121,15 +171,15 @@ namespace UI.ViewModels.Device
         [RelayCommand]
         private async Task SendTestAsync()
         {
-            if (_connection == null || !_connection.IsConnected)
+            if (_owner.Manager.GetLink(Id) is not ITransport transport || !transport.IsConnected)
             {
-                Message = "Chưa kết nối, không gửi được";
+                Message = "Chưa kết nối hoặc thiết bị này không gửi chữ thô được";
                 return;
             }
 
             try
             {
-                await _connection.SendAsync(TestText);
+                await transport.SendAsync(TestText);
                 Message = $"Đã gửi: {TestText}";
             }
             catch (Exception ex)
@@ -141,17 +191,13 @@ namespace UI.ViewModels.Device
         /// <summary>Được gọi định kỳ để phát hiện thiết bị tự ngắt kết nối.</summary>
         public void RefreshStatus()
         {
-            bool alive = _connection?.IsConnected ?? false;
+            bool alive = _owner.Manager.IsConnected(Id);
             if (alive == IsConnected) return;
 
             IsConnected = alive;
             if (!alive) Message = "Mất kết nối";
         }
 
-        public void Dispose()
-        {
-            _connection?.Dispose();
-            _connection = null;
-        }
+        public void Dispose() => _owner.Manager.Disconnect(Id);
     }
 }

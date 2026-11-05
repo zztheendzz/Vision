@@ -6,6 +6,7 @@ using Vision.Graph;
 
 namespace UI.ViewModels.Graph
 {
+    /// <summary>Bọc một VisionNode. Model là nguồn sự thật: vị trí ghi ngược vào model.</summary>
     public partial class NodeViewModel : ViewModelBase
     {
         public VisionNode Model { get; }
@@ -31,7 +32,7 @@ namespace UI.ViewModels.Graph
         public NodeViewModel(VisionNode model)
         {
             Model = model;
-            _location = new Point(model.X, model.Y); // Gán trực tiếp field không gọi setter để tránh ghi ngược
+            _location = new Point(model.X, model.Y);      // gán trường: không kích hoạt ghi ngược
 
             foreach (var p in model.Inputs) Inputs.Add(new ConnectorViewModel(this, p));
             foreach (var p in model.Outputs) Outputs.Add(new ConnectorViewModel(this, p));
@@ -39,12 +40,8 @@ namespace UI.ViewModels.Graph
 
         partial void OnLocationChanged(Point value)
         {
-            // Kiểm tra tránh ghi lặp vô ích khi kéo thả trên canvas
-            if (Model.X != value.X || Model.Y != value.Y)
-            {
-                Model.X = value.X;
-                Model.Y = value.Y;
-            }
+            Model.X = value.X;
+            Model.Y = value.Y;
         }
 
         /// <summary>Gọi trên UI thread.</summary>

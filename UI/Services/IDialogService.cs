@@ -12,6 +12,9 @@ namespace UI.Services
         /// <summary>Hỏi Có/Không. Trả true nếu người dùng chọn Có.</summary>
         bool Confirm(string message);
 
+        /// <summary>Hỏi Có/Không/Hủy. true = Có, false = Không, null = Hủy.</summary>
+        bool? ConfirmYesNoCancel(string message);
+
         void ShowInfo(string message);
 
         /// <summary>Hộp thoại chọn file để mở. Trả null nếu người dùng hủy. filter dạng "CSV|*.csv|Tất cả|*.*".</summary>

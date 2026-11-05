@@ -32,6 +32,18 @@
             </StackPanel>
         </DataTemplate>
 
+        <!-- Giao diện cho tham số chọn từ danh sách (enum) -->
+        <DataTemplate DataType="{x:Type vm:EnumParameterViewModel}">
+            <StackPanel Margin="0,4,0,8">
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource VsMutedBrush}" />
+                <ComboBox Margin="0,2,0,0" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected, Mode=TwoWay}" />
+                <TextBlock Style="{StaticResource OptionalText}" Foreground="#F48771" Margin="0,2,0,0"
+                           Text="{Binding ErrorMessage}" />
+                <TextBlock Style="{StaticResource OptionalText}" Foreground="{StaticResource VsMutedBrush}"
+                           FontStyle="Italic" Margin="0,2,0,0" Text="{Binding Description}" />
+            </StackPanel>
+        </DataTemplate>
+
         <!-- Giao diện cho tham số bật/tắt -->
         <DataTemplate DataType="{x:Type vm:BoolParameterViewModel}">
             <StackPanel Margin="0,4,0,8">

@@ -8,7 +8,7 @@ using UI.Views;
 
 namespace UI
 {
- public partial class MainWindow : Window
+    public partial class MainWindow : Window
     {
         private readonly MainViewModel _viewModel;
         private DeviceConfigWindow? _deviceWindow;
@@ -19,6 +19,12 @@ namespace UI
 
             _viewModel = new MainViewModel(new DialogService());
             DataContext = _viewModel;
+
+            // Còn thay đổi chưa lưu thì hỏi; chọn Hủy thì không đóng
+            Closing += (_, e) =>
+            {
+                if (!_viewModel.ConfirmDiscardOrSave()) e.Cancel = true;
+            };
 
             Closed += (_, _) => _viewModel.Dispose();   // ngắt thiết bị, giải phóng graph và tool
         }
@@ -46,6 +52,8 @@ namespace UI
         {
             if (sender is System.Windows.Controls.TextBox box) box.ScrollToEnd();
         }
+
+        private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
         private void OpenDeviceConfig_Click(object sender, RoutedEventArgs e)
         {

@@ -5,6 +5,7 @@ using Vision.Services;
 
 namespace UI.Services
 {
+    /// <summary>Đưa log của tool/executor ra tab Output. Có thể được gọi từ thread nền: sink tự chuyển về UI thread.</summary>
     public sealed class UiLogger : IVisionLogger
     {
         private readonly Action<string> _sink;

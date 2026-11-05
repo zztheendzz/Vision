@@ -11,25 +11,61 @@
         <Border Background="{StaticResource VsWindowBrush}">
             <DockPanel>
 
-                <!-- Thanh công cụ chung cho mọi kết nối -->
+                <!-- Thanh công cụ -->
                 <Border DockPanel.Dock="Top" Background="{StaticResource VsPanelHeaderBrush}"
                     BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,0,0,1" Padding="6,3">
                     <StackPanel Orientation="Horizontal">
-                        <Button Content="Kết nối tất cả" />
-                        <Button Content="Ngắt tất cả" />
-                        <Button Content="Kiểm tra tất cả" />
+                        <Button Content="Kết nối tất cả" Command="{Binding Devices.ConnectAllCommand}" />
+                        <Button Content="Ngắt tất cả" Command="{Binding Devices.DisconnectAllCommand}" />
+                        <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
+                        <Button Content="Cấu hình thiết bị..." Click="OpenConfig_Click" />
                     </StackPanel>
                 </Border>
 
-                <!-- Danh sách thẻ kết nối: địa chỉ và cổng dưới đây chỉ là giá trị mẫu -->
+                <!-- Mỗi thiết bị trong danh sách là một thẻ. Thêm thiết bị ở cửa sổ cấu hình thì thẻ mới tự xuất hiện. -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <WrapPanel Margin="4">
-                        <!--<views:ConnectionCard Title="Robot"   Protocol="TCP/IP"   Badge="RB"  Address="192.168.1.10" Port="9001" />
-                        <views:ConnectionCard Title="PLC"     Protocol="Modbus TCP / S7" Badge="PLC" Address="192.168.1.20" Port="502" />
-                        <views:ConnectionCard Title="PC"      Protocol="TCP/IP"          Badge="PC"  Address="192.168.1.30" Port="8000" />
-                        <views:ConnectionCard Title="Fixture" Protocol="Ethernet / COM"  Badge="FX"  Address="192.168.1.40" Port="5000" />
-                        <views:ConnectionCard Title="Scanner" Protocol="TCP/IP / COM"    Badge="SC"  Address="192.168.1.50" Port="23" />-->
-                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Devices.Devices}" Margin="4">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="250" Margin="6" Padding="10" CornerRadius="3"
+                                    Background="{StaticResource VsPanelBrush}"
+                                    BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <Ellipse x:Name="Dot" DockPanel.Dock="Left" Width="10" Height="10"
+                                                 Fill="{StaticResource VsMutedBrush}" Margin="0,0,8,0" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding TypeName}"
+                                                   Foreground="{StaticResource VsMutedBrush}" />
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+
+                                        <TextBlock Margin="18,4,0,0" Foreground="{StaticResource VsMutedBrush}" Text="{Binding Summary}" />
+                                        <TextBlock Text="{Binding StatusText}" Margin="18,2,0,0" />
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                            <Button Content="Kết nối" Style="{StaticResource AccentButton}"
+                                                Command="{Binding ConnectCommand}" />
+                                            <Button Content="Ngắt" Style="{StaticResource OutlineButton}"
+                                                Command="{Binding DisconnectCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                        <Setter TargetName="Dot" Property="Fill" Value="{StaticResource VsOkBrush}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </ScrollViewer>
             </DockPanel>
         </Border>

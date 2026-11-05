@@ -23,10 +23,10 @@ namespace UI.Views
             InitializeComponent();
         }
         // Mở cửa sổ cấu hình thiết bị (do cửa sổ chính quản lý để chỉ mở một cửa sổ)
-        //private void OpenConfig_Click(object sender, RoutedEventArgs e)
-        //{
-        //    if (Window.GetWindow(this) is MainWindow main)
-        //        main.OpenDeviceConfig();
-        //}
+        private void OpenConfig_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow main)
+                main.OpenDeviceConfig();
+        }
     }
 }

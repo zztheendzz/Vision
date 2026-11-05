@@ -1,4 +1,5 @@
 ﻿using Communication.Configuration;
+using Communication.Drivers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -10,84 +11,119 @@ using UI.Services;
 
 namespace UI.ViewModels.Device
 {
-    /// <summary>Quản lý danh sách thiết bị: thêm, xóa, lưu, kết nối tất cả, và cập nhật trạng thái định kỳ.</summary>
+    /// <summary>
+    /// Cấu hình kết nối: 6 tab theo loại thiết bị, mỗi tab thêm / đổi tên / xóa thiết bị.
+    /// Còn giữ danh sách phẳng Devices cho thanh trạng thái và tab Kết nối.
+    /// </summary>
     public partial class DeviceConfigViewModel : ViewModelBase, IDisposable
     {
         private readonly DeviceConfigStore _store;
         private readonly IDialogService _dialogs;
+        private readonly DeviceCatalog _catalog;
         private readonly DispatcherTimer _timer;
 
+        /// <summary>Cấu hình thiết bị đang dùng (cùng đối tượng với các ô trên cửa sổ cấu hình).</summary>
+        public DeviceCatalog Catalog => _catalog;
+
+        /// <summary>Giữ các kết nối đang sống; vòng chạy lấy robot/PLC đang nối từ đây.</summary>
+        public DeviceManager Manager { get; }
+
+        /// <summary>Có thay đổi chưa lưu không (cửa sổ cấu hình hỏi trước khi đóng).</summary>
+        public bool IsDirty { get; private set; }
+
+        public ObservableCollection<DeviceTypeViewModel> Types { get; } = new();
+
+        /// <summary>Mọi thiết bị của mọi loại.</summary>
         public ObservableCollection<DeviceViewModel> Devices { get; } = new();
 
-        // Danh sách lựa chọn cho các ô chọn (ComboBox)
-        public IReadOnlyList<DeviceType> DeviceTypes { get; } = Enum.GetValues<DeviceType>();
-        public IReadOnlyList<TerminatorKind> TerminatorKinds { get; } = Enum.GetValues<TerminatorKind>();
-        public IReadOnlyList<string> Encodings { get; } = new[] { "ASCII", "UTF-8" };
+        /// <summary>Riêng các PLC, làm danh sách chọn "PLC nguồn".</summary>
+        public ObservableCollection<DeviceViewModel> Plcs { get; } = new();
 
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(RemoveDeviceCommand))]
-        private DeviceViewModel? _selectedDevice;
-
-        [ObservableProperty]
-        private string _statusMessage = "";
+        [ObservableProperty] private DeviceTypeViewModel? _selectedType;
+        [ObservableProperty] private string _statusMessage = "";
 
         public DeviceConfigViewModel(DeviceConfigStore store, IDialogService dialogs)
         {
             _store = store;
             _dialogs = dialogs;
+            _catalog = store.Load();
+            Manager = new DeviceManager(_catalog);
 
-            foreach (var config in _store.Load())
-                Devices.Add(new DeviceViewModel(config));
-            SelectedDevice = Devices.FirstOrDefault();
+            foreach (var schema in DeviceSchemas.All)
+                Types.Add(new DeviceTypeViewModel(schema, _catalog, this, dialogs));
+
+            // PLC dựng trước để các thiết bị khác tìm được PLC nguồn
+            foreach (var config in _catalog.Devices.OrderBy(d => d.Type != DeviceType.PLC))
+                AddViewModel(config);
+            foreach (var t in Types) t.SelectedDevice = t.Devices.FirstOrDefault();
+            foreach (var d in Devices) d.RefreshSourcePlc();
+            SelectedType = Types.FirstOrDefault();
+
+            if (store.LoadNotes.Count > 0)
+                StatusMessage = string.Join(" ", store.LoadNotes);
 
             // Cứ 2 giây kiểm tra lại xem thiết bị còn nối không
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _timer.Tick += (_, _) =>
-            {
-                foreach (var device in Devices) device.RefreshStatus();
-            };
+            _timer.Tick += (_, _) => { foreach (var d in Devices) d.RefreshStatus(); };
             _timer.Start();
-
-            // Thiết bị nào đánh dấu "Tự kết nối" thì kết nối ngay khi mở phần mềm
-            foreach (var device in Devices.Where(d => d.AutoConnect))
-                _ = device.ConnectCommand.ExecuteAsync(null);
         }
 
-        [RelayCommand]
-        private void AddDevice()
+        // ---------- Thêm / xóa (gọi từ DeviceTypeViewModel) ----------
+
+        internal DeviceViewModel CreateDevice(DeviceType type)
         {
-            var device = new DeviceViewModel(new DeviceConfig { Name = MakeNewName() });
-            Devices.Add(device);
-            SelectedDevice = device;
+            var config = _catalog.AddDevice(type);
+            var vm = AddViewModel(config);
+            vm.RefreshSourcePlc();
+            MarkDirty();
+            return vm;
         }
 
-        [RelayCommand(CanExecute = nameof(HasSelection))]
-        private void RemoveDevice()
+        internal void DeleteDevice(DeviceViewModel device)
         {
-            var device = SelectedDevice;
-            if (device == null) return;
-            if (!_dialogs.Confirm($"Xóa thiết bị '{device.Name}'?")) return;
+            device.Dispose();
+            _catalog.Remove(device.Config);          // PLC bị xóa: thiết bị dùng nó được bỏ chọn trong catalog
 
-            device.Dispose();                        // ngắt kết nối trước khi xóa
             Devices.Remove(device);
-            SelectedDevice = Devices.FirstOrDefault();
+            Plcs.Remove(device);
+            Types.First(t => t.Schema.Type == device.Type).Devices.Remove(device);
+            foreach (var d in Devices) d.RefreshSourcePlc();
+            MarkDirty();
         }
 
-        private bool HasSelection() => SelectedDevice != null;
+        private DeviceViewModel AddViewModel(DeviceConfig config)
+        {
+            var vm = new DeviceViewModel(config, _catalog, this);
+            Devices.Add(vm);
+            if (config.Type == DeviceType.PLC) Plcs.Add(vm);
+            Types.First(t => t.Schema.Type == config.Type).Devices.Add(vm);
+            return vm;
+        }
+
+        internal void MarkDirty()
+        {
+            IsDirty = true;
+            StatusMessage = "Có thay đổi chưa lưu";
+        }
+
+        // ---------- Lưu / kết nối ----------
 
         [RelayCommand]
         private void Save()
         {
-            string? error = Validate();
-            if (error != null)
+            var errors = _catalog.Validate();
+            if (errors.Count > 0)
             {
-                _dialogs.ShowError(error);
+                string shown = string.Join("\n", errors.Take(12));
+                if (errors.Count > 12) shown += $"\n... và {errors.Count - 12} lỗi nữa";
+                _dialogs.ShowError("Chưa lưu được:\n" + shown);
                 return;
             }
 
             try
             {
-                _store.Save(Devices.Select(d => d.ToConfig()));
+                _store.Save(_catalog);
+                IsDirty = false;
                 StatusMessage = $"Đã lưu lúc {DateTime.Now:HH:mm:ss}";
             }
             catch (Exception ex)
@@ -99,50 +135,19 @@ namespace UI.ViewModels.Device
         [RelayCommand]
         private async Task ConnectAllAsync()
         {
-            await Task.WhenAll(Devices.Select(d => d.ConnectCommand.ExecuteAsync(null)));
+            await Task.WhenAll(Devices.Where(d => d.CanConnect).Select(d => d.ConnectCommand.ExecuteAsync(null)));
         }
 
         [RelayCommand]
         private void DisconnectAll()
         {
-            foreach (var device in Devices) device.DisconnectCommand.Execute(null);
-        }
-
-        /// <summary>Kiểm tra dữ liệu trước khi lưu. Trả về nội dung lỗi, hoặc null nếu hợp lệ.</summary>
-        private string? Validate()
-        {
-            foreach (var d in Devices)
-            {
-                if (string.IsNullOrWhiteSpace(d.Name))
-                    return "Có thiết bị chưa đặt tên.";
-                if (string.IsNullOrWhiteSpace(d.IpAddress))
-                    return $"Thiết bị '{d.Name}' chưa có địa chỉ IP.";
-                if (d.Port < 1 || d.Port > 65535)
-                    return $"Thiết bị '{d.Name}': cổng phải từ 1 đến 65535.";
-                if (d.TimeoutMs < 100)
-                    return $"Thiết bị '{d.Name}': thời gian chờ tối thiểu 100 ms.";
-            }
-
-            var duplicate = Devices
-                .GroupBy(d => d.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault(g => g.Count() > 1);
-            if (duplicate != null)
-                return $"Có hai thiết bị trùng tên '{duplicate.Key}'.";
-
-            return null;
-        }
-
-        private string MakeNewName()
-        {
-            int i = Devices.Count + 1;
-            while (Devices.Any(d => d.Name == $"Thiết bị {i}")) i++;
-            return $"Thiết bị {i}";
+            foreach (var d in Devices) d.DisconnectCommand.Execute(null);
         }
 
         public void Dispose()
         {
             _timer.Stop();
-            foreach (var device in Devices) device.Dispose();
+            Manager.Dispose();
         }
     }
 }

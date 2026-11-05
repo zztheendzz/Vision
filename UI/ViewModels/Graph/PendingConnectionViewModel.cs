@@ -7,7 +7,9 @@ using UI.ViewModels.Graph;
 
 namespace UI.ViewModels.Graph
 {
-    public partial class PendingConnectionViewModel:ViewModelBase
+
+    /// <summary>Dây đang kéo dở. Thả lên cổng khác thì nhờ GraphEditorViewModel nối thật.</summary>
+    public partial class PendingConnectionViewModel : ViewModelBase
     {
         private readonly GraphEditorViewModel _editor;
 

@@ -16,6 +16,10 @@
         Foreground="#FFCCCCCC">
 
     <Window.InputBindings>
+        <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewRecipeCommand}" />
+        <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding OpenRecipeCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCurrentRecipeCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveRecipeAsCommand}" />
         <KeyBinding Key="Delete" Command="{Binding Editor.DeleteSelectedCommand}" />
         <KeyBinding Key="F5" Command="{Binding Run.RunOnceCommand}" />
         <KeyBinding Key="F5" Modifiers="Shift" Command="{Binding Run.StopCommand}" />
@@ -26,47 +30,47 @@
         <!-- ================= THANH MENU ================= -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_Tệp">
-                <MenuItem Header="Mới" InputGestureText="Ctrl+N" />
-                <MenuItem Header="Mở..." InputGestureText="Ctrl+O" />
+                <MenuItem Header="Mới" InputGestureText="Ctrl+N" Command="{Binding NewRecipeCommand}" />
+                <MenuItem Header="Mở..." InputGestureText="Ctrl+O" Command="{Binding OpenRecipeCommand}" />
                 <Separator />
-                <MenuItem Header="Lưu" InputGestureText="Ctrl+S" />
-                <MenuItem Header="Lưu thành..." InputGestureText="Ctrl+Shift+S" />
+                <MenuItem Header="Lưu" InputGestureText="Ctrl+S" Command="{Binding SaveCurrentRecipeCommand}" />
+                <MenuItem Header="Lưu thành..." InputGestureText="Ctrl+Shift+S" Command="{Binding SaveRecipeAsCommand}" />
                 <Separator />
-                <MenuItem Header="Thoát" InputGestureText="Alt+F4" />
+                <MenuItem Header="Thoát" InputGestureText="Alt+F4" Click="Exit_Click" />
             </MenuItem>
             <MenuItem Header="_Sửa">
-                <MenuItem Header="Hoàn tác" InputGestureText="Ctrl+Z" />
-                <MenuItem Header="Làm lại" InputGestureText="Ctrl+Y" />
+                <MenuItem IsEnabled="False" Header="Hoàn tác" InputGestureText="Ctrl+Z" />
+                <MenuItem IsEnabled="False" Header="Làm lại" InputGestureText="Ctrl+Y" />
                 <Separator />
                 <MenuItem Header="Xóa node" InputGestureText="Delete" Command="{Binding Editor.DeleteSelectedCommand}" />
-                <MenuItem Header="Chọn tất cả" InputGestureText="Ctrl+A" />
+                <MenuItem IsEnabled="False" Header="Chọn tất cả" InputGestureText="Ctrl+A" />
             </MenuItem>
             <MenuItem Header="_Xem">
-                <MenuItem Header="Toolbox" IsCheckable="True" IsChecked="True" />
-                <MenuItem Header="Thuộc tính" IsCheckable="True" IsChecked="True" />
-                <MenuItem Header="Ảnh gốc" IsCheckable="True" IsChecked="True" />
-                <MenuItem Header="Ảnh xử lý" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Toolbox" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Thuộc tính" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Ảnh gốc" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Ảnh xử lý" IsCheckable="True" IsChecked="True" />
                 <Separator />
-                <MenuItem Header="Output" IsCheckable="True" IsChecked="True" />
-                <MenuItem Header="Kết nối" IsCheckable="True" IsChecked="True" />
-                <MenuItem Header="Kết quả" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Output" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Kết nối" IsCheckable="True" IsChecked="True" />
+                <MenuItem IsEnabled="False" Header="Kết quả" IsCheckable="True" IsChecked="True" />
                 <Separator />
-                <MenuItem Header="Đặt lại bố cục" />
+                <MenuItem IsEnabled="False" Header="Đặt lại bố cục" />
             </MenuItem>
             <MenuItem Header="_Dự án">
-                <MenuItem Header="Công thức (Recipe)..." />
+                <MenuItem IsEnabled="False" Header="Công thức (Recipe)..." />
                 <MenuItem Header="Hiệu chuẩn camera - robot (từ CSV)..." Command="{Binding CalibrateFromCsvCommand}" />
-                <MenuItem Header="Thư mục ảnh mẫu..." />
+                <MenuItem IsEnabled="False" Header="Thư mục ảnh mẫu..." />
             </MenuItem>
             <MenuItem Header="_Chạy">
                 <MenuItem Header="Chạy một lần" InputGestureText="F5" Command="{Binding Run.RunOnceCommand}" />
                 <MenuItem Header="Học mẫu" Command="{Binding Run.TeachCommand}" />
-                <MenuItem Header="Chạy liên tục" InputGestureText="Ctrl+F5" />
+                <MenuItem IsEnabled="False" Header="Chạy liên tục" InputGestureText="Ctrl+F5" />
                 <MenuItem Header="Dừng" InputGestureText="Shift+F5" Command="{Binding Run.StopCommand}" />
                 <Separator />
                 <MenuItem Header="Chế độ">
-                    <MenuItem Header="Chạy thử (không điều khiển thiết bị)" IsCheckable="True" IsChecked="{Binding Run.IsDryRun, Mode=TwoWay}" />
-                    <MenuItem Header="Chạy thật" IsCheckable="True" IsChecked="{Binding Run.IsLive, Mode=TwoWay}" />
+                    <MenuItem IsEnabled="False" Header="Chạy thử (không điều khiển thiết bị)" IsCheckable="True" IsChecked="{Binding Run.IsDryRun, Mode=TwoWay}" />
+                    <MenuItem IsEnabled="False" Header="Chạy thật" IsCheckable="True" IsChecked="{Binding Run.IsLive, Mode=TwoWay}" />
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Kết nối">
@@ -76,10 +80,10 @@
                 <MenuItem Header="Cấu hình thiết bị..." Click="OpenDeviceConfig_Click" />
             </MenuItem>
             <MenuItem Header="C_ông cụ">
-                <MenuItem Header="Tùy chọn..." />
+                <MenuItem IsEnabled="False" Header="Tùy chọn..." />
             </MenuItem>
             <MenuItem Header="_Trợ giúp">
-                <MenuItem Header="Giới thiệu" />
+                <MenuItem IsEnabled="False" Header="Giới thiệu" />
             </MenuItem>
         </Menu>
 
@@ -87,18 +91,18 @@
         <Border DockPanel.Dock="Top" Background="{StaticResource VsPanelHeaderBrush}"
                 BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,1">
             <StackPanel Orientation="Horizontal" Margin="4,3">
-                <Button Content="Mới" />
-                <Button Content="Mở" />
-                <Button Content="Lưu" />
+                <Button Content="Mới" Command="{Binding NewRecipeCommand}" />
+                <Button Content="Mở" Command="{Binding OpenRecipeCommand}" />
+                <Button Content="Lưu" Command="{Binding SaveCurrentRecipeCommand}" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-                <Button Content="Hoàn tác" />
-                <Button Content="Làm lại" />
+                <Button IsEnabled="False" Content="Hoàn tác" />
+                <Button IsEnabled="False" Content="Làm lại" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
                 <Button Content="&#9654; Chạy một lần" Command="{Binding Run.RunOnceCommand}" />
                 <Button Content="Học mẫu" Command="{Binding Run.TeachCommand}" />
-                <Button Content="&#10227; Chạy liên tục" />
+                <Button IsEnabled="False" Content="&#10227; Chạy liên tục" />
                 <Button Content="&#9632; Dừng" Command="{Binding Run.StopCommand}" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
@@ -108,15 +112,15 @@
                 <ToggleButton Content="Chạy thật" Style="{StaticResource LiveToggle}" IsChecked="{Binding Run.IsLive, Mode=TwoWay}" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />
 
-                <Button Content="Vừa khung" />
+                <Button IsEnabled="False" Content="Vừa khung" />
             </StackPanel>
         </Border>
 
-        <!-- ================= THANH TRẠNG THÁI ================= -->
+        <!-- ================= THANH TRẠNG THÁI (xanh như Visual Studio) ================= -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource VsAccentBrush}" Padding="10,3">
             <DockPanel TextElement.Foreground="White">
 
-                <!-- Tình trạng từng kết nối -->
+                <!-- Tình trạng từng kết nối: xám là chưa kết nối -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <ItemsControl ItemsSource="{Binding Devices.Devices}">
                         <ItemsControl.ItemsPanel>
@@ -139,7 +143,6 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <!-- Sửa lỗi bindingDataContext bên trong ItemsControl bằng cách gọi qua MainViewModel trực tiếp -->
                     <TextBlock Text="{Binding Run.ModeText}" Margin="20,0,0,0" />
                 </StackPanel>
 
@@ -189,6 +192,7 @@
 
                 <TabControl Grid.Row="2">
                     <TabItem Header="Output">
+                        <!-- Nội dung dưới đây chỉ là chữ mẫu để xem giao diện -->
                         <TextBox IsReadOnly="True" BorderThickness="0" Background="{StaticResource VsWindowBrush}"
                                  FontFamily="Consolas" AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
@@ -280,7 +284,7 @@
                     <RowDefinition Height="*" MinHeight="120" />
                 </Grid.RowDefinitions>
                 <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" Display="{Binding Run.Original}"
-                                        Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
+                                       Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
                 <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
                 <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}" />
             </Grid>

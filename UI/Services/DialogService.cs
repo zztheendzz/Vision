@@ -15,6 +15,14 @@ namespace UI.Services
             => MessageBox.Show(message, "Xác nhận", MessageBoxButton.YesNo, MessageBoxImage.Question)
                == MessageBoxResult.Yes;
 
+        public bool? ConfirmYesNoCancel(string message)
+            => MessageBox.Show(message, "Xác nhận", MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
+            {
+                MessageBoxResult.Yes => true,
+                MessageBoxResult.No => false,
+                _ => null
+            };
+
         public void ShowInfo(string message)
             => MessageBox.Show(message, "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
 

@@ -1,4 +1,5 @@
 ﻿using Communication.Configuration;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.IO;
 using System.Text;
@@ -10,14 +11,21 @@ using UI.ViewModels.RunAndDisplay;
 using UI.ViewModels.ToolboxAndParam;
 using Vision.Calibration;
 using Vision.Graph;
+using Vision.Project;
 
 namespace UI.ViewModels
 {
     /// <summary>Gom các ViewModel và nối chúng với nhau.</summary>
-    public class MainViewModel : ViewModelBase, IDisposable
+    public partial class MainViewModel : ViewModelBase, IDisposable
     {
-        private readonly VisionGraph _graph;
+        private const string RecipeFilter = "Recipe (*.vgraph)|*.vgraph|JSON|*.json|Tất cả|*.*";
         private readonly IDialogService _dialogs;
+
+        private string? _recipePath;
+        private bool _isDirty;
+
+        /// <summary>Tiêu đề cửa sổ: tên file, dấu * nếu có thay đổi chưa lưu.</summary>
+        [ObservableProperty] private string _title = "Vision Graph";
 
         public GraphEditorViewModel Editor { get; }
         public ToolboxViewModel Toolbox { get; }
@@ -39,16 +47,135 @@ namespace UI.ViewModels
         {
             _dialogs = dialogs;
             CalibrateFromCsvCommand = new RelayCommand(CalibrateFromCsv);
-            _graph = BuildDemoGraph();
-            Editor = new GraphEditorViewModel(_graph, dialogs);
+
+            Devices = new DeviceConfigViewModel(new DeviceConfigStore(), dialogs);
+            Editor = new GraphEditorViewModel(BuildDemoGraph(), dialogs);
             Toolbox = new ToolboxViewModel();
             Properties = new PropertyPanelViewModel();
-            Run = new RunViewModel(Editor, dialogs);
+            Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager));
             Roi = new RoiEditorViewModel(Editor, Properties);
-            Devices = new DeviceConfigViewModel(new DeviceConfigStore(), dialogs);
 
             // Chọn node nào trên đồ thị thì bảng thuộc tính hiển thị tham số của node đó
             Editor.SelectedNodeChanged += (_, _) => Properties.Node = Editor.SelectedNode;
+
+            // Sửa tham số, thêm/xóa node, nối dây... đều đánh dấu "chưa lưu"
+            Properties.ParameterEdited += (_, _) => MarkDirty();
+            Editor.Nodes.CollectionChanged += (_, _) => MarkDirty();
+            Editor.Connections.CollectionChanged += (_, _) => MarkDirty();
+
+            _isDirty = false;
+            UpdateTitle();
+        }
+
+        // ================= RECIPE (lưu / mở) =================
+
+        private void MarkDirty()
+        {
+            if (_isDirty) return;
+            _isDirty = true;
+            UpdateTitle();
+        }
+
+        private void UpdateTitle()
+        {
+            string name = _recipePath == null ? "Chưa đặt tên" : Path.GetFileName(_recipePath);
+            Title = $"Vision Graph - {name}{(_isDirty ? " *" : "")}";
+        }
+
+        /// <summary>
+        /// Có thay đổi chưa lưu thì hỏi Lưu / Không lưu / Hủy.
+        /// Trả về false nếu người dùng Hủy hoặc việc lưu không xong (đừng làm gì tiếp).
+        /// </summary>
+        public bool ConfirmDiscardOrSave()
+        {
+            if (!_isDirty) return true;
+
+            return _dialogs.ConfirmYesNoCancel("Recipe có thay đổi chưa lưu. Lưu lại trước khi tiếp tục?") switch
+            {
+                true => SaveRecipe(),
+                false => true,
+                null => false
+            };
+        }
+
+        [RelayCommand]
+        private void NewRecipe()
+        {
+            if (Run.IsRunning) return;
+            if (!ConfirmDiscardOrSave()) return;
+
+            ReplaceGraph(new VisionGraph(), null);
+        }
+
+        [RelayCommand]
+        private void OpenRecipe()
+        {
+            if (Run.IsRunning) return;
+            if (!ConfirmDiscardOrSave()) return;
+
+            string? path = _dialogs.PickOpenFile("Mở recipe", RecipeFilter);
+            if (path == null) return;
+
+            try
+            {
+                var loaded = GraphSerializer.Load(path);       // đủ hoặc không: lỗi thì graph hiện tại không bị đụng
+                ReplaceGraph(loaded.Graph, path);
+                if (loaded.Warnings.Count > 0)
+                    _dialogs.ShowInfo("Đã mở, có lưu ý:\n - " + string.Join("\n - ", loaded.Warnings));
+            }
+            catch (RecipeException ex)
+            {
+                _dialogs.ShowError("Không mở được recipe:\n" + ex.Message);
+            }
+            catch (IOException ex)
+            {
+                _dialogs.ShowError("Không đọc được file: " + ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void SaveCurrentRecipe() => SaveRecipe();
+
+        [RelayCommand]
+        private void SaveRecipeAs() => SaveRecipe(forcePrompt: true);
+
+        private bool SaveRecipe(bool forcePrompt = false)
+        {
+            if (Run.IsRunning) return false;
+
+            string? path = _recipePath;
+            if (path == null || forcePrompt)
+            {
+                path = _dialogs.PickSaveFile("Lưu recipe", RecipeFilter, "recipe.vgraph");
+                if (path == null) return false;
+            }
+
+            try
+            {
+                GraphSerializer.Save(Editor.Model, path, Path.GetFileNameWithoutExtension(path));
+                _recipePath = path;
+                _isDirty = false;
+                UpdateTitle();
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _dialogs.ShowError("Không lưu được: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void ReplaceGraph(VisionGraph graph, string? path)
+        {
+            var old = Editor.Model;
+            Properties.Node = null;
+            Run.Reset();                       // bỏ ảnh/kết quả của graph cũ trước khi giải phóng nó
+            Editor.Load(graph);
+            old.Dispose();
+
+            _recipePath = path;
+            _isDirty = false;
+            UpdateTitle();
         }
 
         private void CalibrateFromCsv()
@@ -84,6 +211,7 @@ namespace UI.ViewModels
         private static VisionGraph BuildDemoGraph()
         {
             var g = new VisionGraph();
+
             return g;
         }
 
@@ -91,7 +219,7 @@ namespace UI.ViewModels
         {
             Run.Dispose();         // dừng lần chạy dở, giải phóng ảnh và kết quả
             Devices.Dispose();     // ngắt mọi kết nối
-            _graph.Dispose();
+            Editor.Model.Dispose();
         }
     }
 }

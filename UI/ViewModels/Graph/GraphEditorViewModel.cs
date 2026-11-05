@@ -13,7 +13,11 @@ using Vision.Graph;
 
 namespace UI.ViewModels.Graph
 {
-    public partial class GraphEditorViewModel:ViewModelBase
+    /// <summary>
+    /// Bọc VisionGraph. Đây là NƠI DUY NHẤT sửa graph (thêm/xóa node, nối/ngắt dây),
+    /// nên model không cần bắn sự kiện, và sau này gắn undo/redo vào đúng một chỗ.
+    /// </summary>
+    public partial class GraphEditorViewModel : ViewModelBase
     {
         private readonly IDialogService _dialogs;
         private readonly Dictionary<VisionNode, NodeViewModel> _nodeMap = new();
@@ -189,6 +193,5 @@ namespace UI.ViewModels.Graph
         {
             if (_nodeMap.TryGetValue(node, out var vm)) vm.ApplyRun(run);
         }
-
     }
 }

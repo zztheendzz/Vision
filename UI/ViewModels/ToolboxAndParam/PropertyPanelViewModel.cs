@@ -60,6 +60,9 @@ namespace UI.ViewModels.ToolboxAndParam
             if (definition.Type == typeof(bool))
                 return new BoolParameterViewModel(node, definition);
 
+            if (definition.Type.IsEnum)
+                return new EnumParameterViewModel(node, definition);
+
             return new TextParameterViewModel(node, definition);
         }
 

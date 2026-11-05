@@ -1,0 +1,207 @@
+namespace Communication.Configuration
+{
+    /// <summary>Bộ thuộc tính của một loại thiết bị.</summary>
+    public sealed class DeviceTypeSchema
+    {
+        public DeviceType Type { get; init; }
+        /// <summary>Tên hiển thị của loại, ví dụ "Máy quét".</summary>
+        public string DisplayName { get; init; } = "";
+        /// <summary>Tiền tố đặt tên thiết bị mới: "Camera" → "Camera 1", "Camera 2"...</summary>
+        public string NamePrefix { get; init; } = "";
+        /// <summary>Thiết bị loại này có chọn "PLC nguồn" không.</summary>
+        public bool HasPlcSource { get; init; }
+        /// <summary>Trạng thái bật/tắt khi vừa thêm.</summary>
+        public bool DefaultEnabled { get; init; }
+        /// <summary>Cài đặt chung cho cả loại (chế độ, ký tự kết thúc...).</summary>
+        public IReadOnlyList<FieldDef> GroupFields { get; init; } = Array.Empty<FieldDef>();
+        /// <summary>Thuộc tính riêng của từng thiết bị.</summary>
+        public IReadOnlyList<FieldDef> DeviceFields { get; init; } = Array.Empty<FieldDef>();
+
+        public FieldDef? FindGroup(string key) => GroupFields.FirstOrDefault(f => f.Key == key);
+        public FieldDef? FindDevice(string key) => DeviceFields.FirstOrDefault(f => f.Key == key);
+    }
+
+    /// <summary>
+    /// Thuộc tính của 6 loại thiết bị. Giá trị mặc định lấy từ màn hình mẫu; riêng camera và các danh sách lựa chọn
+    /// là giá trị gợi ý, chỉnh lại ở đây nếu cần.
+    /// PLC và Robot có ô "Chế độ": Mitsubishi (nối thật, mặc định) hoặc Simulated (chạy giả lập khi chưa có thiết bị).
+    /// </summary>
+    public static class DeviceSchemas
+    {
+        // Khóa dùng ở nhiều nơi (code kết nối đọc theo khóa này)
+        public const string KeyMode = "Mode";
+        public const string KeyIp = "Ip";
+        public const string KeyPort = "Port";
+        public const string KeyTimeoutMs = "TimeoutMs";
+        public const string KeyTx = "TxTerminator";
+        public const string KeyRx = "RxTerminator";
+
+        public const string Simulated = "Simulated";
+        public const string Mitsubishi = "Mitsubishi";
+
+        private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
+            => new(key, label, FieldKind.Text, def, section, Hint: hint);
+        private static FieldDef Int(string key, string label, int def, double min, double max, string section = "", string hint = "")
+            => new(key, label, FieldKind.Integer, def.ToString(), section, Min: min, Max: max, Hint: hint);
+        private static FieldDef Num(string key, string label, string def, double min, double max, string section = "", string hint = "")
+            => new(key, label, FieldKind.Number, def, section, Min: min, Max: max, Hint: hint);
+        private static FieldDef Bool(string key, string label, bool def, string section = "", string hint = "")
+            => new(key, label, FieldKind.Bool, def ? "true" : "false", section, Hint: hint);
+        private static FieldDef Choice(string key, string label, string def, string[] choices, string section = "")
+            => new(key, label, FieldKind.Choice, def, section, choices);
+        private static FieldDef Addr(string key, string label, string def, string section = "Bit / thanh ghi PLC")
+            => new(key, label, FieldKind.Address, def, section);
+        private static FieldDef Ip(string key, string label, string def, string section = "Kết nối")
+            => new(key, label, FieldKind.IpAddress, def, section);
+        private static FieldDef Term(string key, string label, string def = @"\r\n")
+            => new(key, label, FieldKind.Terminator, def, "Ký tự kết thúc", Hint: @"Gõ \r \n \t \0 hoặc \xHH");
+
+        /// <summary>Làm ô chỉ hiện khi Chế độ = Mitsubishi (các thông số nối thật).</summary>
+        private static FieldDef WhenMitsubishi(FieldDef f) => f with { ShowWhenKey = KeyMode, ShowWhenValue = Mitsubishi };
+
+        public static readonly IReadOnlyList<DeviceTypeSchema> All = new List<DeviceTypeSchema>
+        {
+            new()
+            {
+                Type = DeviceType.Camera, DisplayName = "Camera", NamePrefix = "Camera",
+                HasPlcSource = true, DefaultEnabled = false,
+                DeviceFields = new[]
+                {
+                    Choice("Protocol", "Giao thức truyền thông", "GigE Vision", new[] { "GigE Vision", "USB3 Vision", Simulated }, "Kết nối"),
+                    Txt("DeviceId", "Thiết bị", "", "Kết nối", "Số seri hoặc tên camera"),
+                    Choice("ColorSpace", "Không gian màu", "Mono", new[] { "Mono", "RGB" }, "Ảnh"),
+                    Choice("Trigger", "Kiểu trigger", "Software", new[] { "Software", "Hardware", "Liên tục" }, "Ảnh"),
+                    Choice("PixelFormat", "Định dạng pixel", "Mono8", new[] { "Mono8", "Mono12", "BayerRG8", "RGB8" }, "Ảnh"),
+                    Int("HeartbeatMs", "Heartbeat (ms)", 3000, 100, 600000, "GigE"),
+                    Int("PacketSize", "Packet size (B)", 1500, 576, 16000, "GigE"),
+                    Addr("ErrorBit", "Bit Error", "L851"),
+                    Num("Exposure", "Phơi sáng (µs)", "5000", 1, 10_000_000, "Tinh chỉnh"),
+                    Num("DarkLevel", "Vùng tối", "0", 0, 4095, "Tinh chỉnh"),
+                    Num("Gain", "Gain", "0", 0, 100, "Tinh chỉnh"),
+                    Num("Gamma", "Gamma", "1", 0.1, 4, "Tinh chỉnh"),
+                }
+            },
+            new()
+            {
+                Type = DeviceType.Scanner, DisplayName = "Máy quét", NamePrefix = "Scanner",
+                HasPlcSource = true, DefaultEnabled = false,
+                GroupFields = new[]
+                {
+                    Choice(KeyMode, "Chế độ", Simulated, new[] { Simulated, "TCP Client", "Serial" }, "Chung"),
+                    Term(KeyTx, "Ký tự kết thúc TX"),
+                    Term(KeyRx, "Ký tự kết thúc RX"),
+                },
+                DeviceFields = new[]
+                {
+                    Txt("StartChar", "Bắt đầu", "E", "Giao thức"),
+                    Txt("EndChar", "Kết thúc", "D", "Giao thức"),
+                    Txt("ScanCommand", "Lệnh quét", "TRIGGER", "Giao thức"),
+                    Txt("NgString", "Chuỗi NG", "", "Giao thức"),
+                    Txt("StopCommand", "Lệnh dừng quét", "Y", "Giao thức"),
+                    Addr("TriggerBit", "Trigger Bit", "M641"),
+                    Addr("PassBit", "Bit Pass", "M651"),
+                    Addr("FailBit", "Bit Fail", "M661"),
+                    Addr("ErrorBit", "Bit Error", "L861"),
+                    Int("CodeLength", "Độ dài mã", 0, 0, 1000, "Giao thức", "0 = không kiểm tra độ dài"),
+                }
+            },
+            new()
+            {
+                // PLC Mitsubishi qua HslCommunication (giao thức MC)
+                Type = DeviceType.PLC, DisplayName = "PLC", NamePrefix = "PLC",
+                HasPlcSource = false, DefaultEnabled = true,
+                DeviceFields = new[]
+                {
+                    Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, Simulated }, "Kết nối"),
+                    WhenMitsubishi(Ip(KeyIp, "IP", "192.168.0.195")),
+                    WhenMitsubishi(Int(KeyPort, "Cổng", 3006, 1, 65535, "Kết nối")),
+                    WhenMitsubishi(Choice("Frame", "Khung dữ liệu", "Binary", new[] { "Binary", "Ascii" }, "Kết nối")),
+                    WhenMitsubishi(Int(KeyTimeoutMs, "Timeout (ms)", 3000, 100, 60000, "Kết nối")),
+                    Int("PollMs", "Poll (ms)", 20, 1, 60000, "Kết nối"),
+                    Bool("UseAxis", "Dùng trục", false, "Kết nối"),
+                    Addr("StartBit", "Bit Start", "M303"),
+                    Addr("StopBit", "Bit Stop", "M162"),
+                    Addr("ResetBit", "Bit Reset", "M164"),
+                    Addr("ManualBit", "Bit Manual", "M162"),
+                    Addr("ResetErrorBit", "Bit Reset Error", "I500"),
+                    Addr("ErrorBit", "Bit Error", "I693"),
+                    Addr("PickOnlyBit", "Bit pick-only", ""),
+                    Addr("GDecodeReg", "G-Decode Reg", ""),
+                    Addr("CameraTrigger", "Trigger camera", ""),
+                    Addr("FovReg", "Thanh ghi FOV", "D600"),
+                    Addr("RunBit", "Bit chạy", "L1000"),
+                }
+            },
+            new()
+            {
+                // Robot Mitsubishi MELFA qua Melfa.Robot (R-protocol)
+                Type = DeviceType.Robot, DisplayName = "Robot", NamePrefix = "Robot",
+                HasPlcSource = true, DefaultEnabled = true,
+                DeviceFields = new[]
+                {
+                    Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, Simulated }, "Kết nối"),
+                    WhenMitsubishi(Ip(KeyIp, "IP", "192.168.0.20")),
+                    WhenMitsubishi(Int(KeyPort, "Cổng (đã đặt ở bộ điều khiển)", 10009, 1, 65535, "Kết nối")),
+                    WhenMitsubishi(Int("RobotNo", "Số robot", 1, 1, 3, "Kết nối")),
+                    WhenMitsubishi(Txt("ClientName", "Tên phiên làm việc", "VisionApp", "Kết nối")),
+                    WhenMitsubishi(Bool("EnableOnConnect", "Bật điều khiển + servo khi kết nối", false, "An toàn",
+                        "Tắt là an toàn: chương trình không tự bật servo robot")),
+                    WhenMitsubishi(Txt("OffsetCommand", "Lệnh gửi độ bù", "P_OFS=({dx},{dy},0,0,0,{drz})", "Độ bù",
+                        "{dx} {dy} (mm), {drz} (độ), {id} = số chu kỳ. CHƯA kiểm chứng: thử trên RT ToolBox")),
+                    WhenMitsubishi(Txt("RejectCommand", "Lệnh báo NG", "", "Độ bù",
+                        "Để trống = chưa cấu hình, chương trình sẽ báo lỗi khi cần báo NG")),
+                    WhenMitsubishi(Num("MaxOffsetMm", "Giới hạn gửi lệch (mm)", "50", 0.1, 1000, "An toàn")),
+                    WhenMitsubishi(Num("MaxOffsetDeg", "Giới hạn gửi góc (độ)", "30", 0.1, 360, "An toàn")),
+                    Addr("IoEnaBit", "IOENA", "M305"),
+                    Txt("Model3d", "Model 3D", "", "Hiển thị", "Đường dẫn file model"),
+                }
+            },
+            new()
+            {
+                Type = DeviceType.Fixture, DisplayName = "Khuôn test", NamePrefix = "Fixture",
+                HasPlcSource = true, DefaultEnabled = true,
+                GroupFields = new[]
+                {
+                    Choice(KeyMode, "Chế độ", "TCP Split", new[] { Simulated, "TCP", "TCP Split" }, "Chung"),
+                    Choice("OpenKind", "Kiểu mở khuôn test", "Mở ngay", new[] { "Mở ngay", "Mở sau khi có kết quả" }, "Chung"),
+                    Bool("OnlyFail", "Only Fail", false, "Chung"),
+                    Bool("AskMode", "ASK Mode", true, "Chung"),
+                    Term(KeyTx, "Ký tự kết thúc TX"),
+                    Term(KeyRx, "Ký tự kết thúc RX"),
+                    Int("ListenPort", "Cổng nhận", 5002, 1, 65535, "Chung"),
+                },
+                DeviceFields = new[]
+                {
+                    Ip(KeyIp, "IP", "10.153.66.83"),
+                    Int(KeyPort, "Cổng", 9999, 1, 65535, "Kết nối"),
+                    Addr("ResultReg", "Thanh ghi kết quả", "D1001"),
+                    Int("Slots", "Số slot", 1, 1, 64, "Kết nối"),
+                    Int("TestTimeoutS", "Timeout test (giây)", 100, 1, 36000, "Thời gian"),
+                    Int("CloseToOpenMs", "Nghỉ Đóng→Mở (ms)", 2000, 0, 600000, "Thời gian"),
+                    Addr("HasSampleBit", "Bit có bản", "M1001"),
+                    Bool("CloseOnly", "Chỉ đóng/không gửi SN", false, "Kết nối"),
+                }
+            },
+            new()
+            {
+                Type = DeviceType.PC, DisplayName = "PC", NamePrefix = "PC",
+                HasPlcSource = false, DefaultEnabled = false,
+                GroupFields = new[]
+                {
+                    Choice(KeyMode, "Chế độ", "TCP Client", new[] { Simulated, "TCP Client" }, "Chung"),
+                    Term(KeyTx, "Ký tự kết thúc TX"),
+                    Term(KeyRx, "Ký tự kết thúc RX"),
+                },
+                DeviceFields = new[]
+                {
+                    Ip(KeyIp, "IP", "192.168.0.1"),
+                    Int(KeyPort, "Cổng", 5000, 1, 65535, "Kết nối"),
+                    Int(KeyTimeoutMs, "Timeout (ms)", 2000, 100, 600000, "Kết nối"),
+                    Addr("ErrorBit", "Bit Error", "L871"),
+                }
+            },
+        };
+
+        public static DeviceTypeSchema For(DeviceType type) => All.First(s => s.Type == type);
+    }
+}

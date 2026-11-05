@@ -1,16 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using Communication.Drivers;
 
 namespace Communication.Transport
 {
-    public interface ITransport
+    /// <summary>Đường truyền chữ có ký tự kết thúc (dùng cho Khuôn test và PC; PLC / Robot dùng thư viện Mitsubishi).</summary>
+    public interface ITransport : IDeviceLink
     {
-        void Connect();
-        void Disconnect();
-        void Send(byte[] data);
-        void Send(string data);
-        void Receive(Action<byte[]> callback);
-        bool IsConnected { get; }
+        Task SendAsync(string text, CancellationToken ct = default);
+
+        /// <summary>Gửi một dòng rồi chờ một dòng trả lời (đến ký tự kết thúc RX). Quá hạn thì ném TimeoutException.</summary>
+        Task<string> RequestAsync(string text, int timeoutMs, CancellationToken ct = default);
     }
 }

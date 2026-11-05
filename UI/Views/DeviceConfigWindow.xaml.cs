@@ -1,26 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+
 
 namespace UI.Views
 {
-    /// <summary>
-    /// Interaction logic for DeviceConfigWindow.xaml
-    /// </summary>
     public partial class DeviceConfigWindow : Window
     {
         public DeviceConfigWindow()
         {
             InitializeComponent();
+
+            // Đóng khi còn thay đổi chưa lưu: hỏi Lưu / Không lưu / Hủy
+            Closing += (_, e) =>
+            {
+                if (DataContext is not ViewModels.Device.DeviceConfigViewModel vm || !vm.IsDirty) return;
+
+                var answer = MessageBox.Show(this, "Cấu hình thiết bị có thay đổi chưa lưu. Lưu lại?", "Xác nhận",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+                if (answer == MessageBoxResult.Cancel) e.Cancel = true;
+                else if (answer == MessageBoxResult.Yes)
+                {
+                    vm.SaveCommand.Execute(null);
+                    if (vm.IsDirty) e.Cancel = true;      // lưu không được (có lỗi): giữ cửa sổ để sửa
+                }
+            };
         }
+
         private void Close_Click(object sender, RoutedEventArgs e)
         {
             Close();

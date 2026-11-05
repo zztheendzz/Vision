@@ -33,6 +33,7 @@ namespace UI.ViewModels.RunAndDisplay
 
         private readonly GraphEditorViewModel _editor;
         private readonly IDialogService _dialogs;
+        private readonly OffsetDispatcher _dispatcher;
         private readonly SynchronizationContext _ui;
         private readonly StringBuilder _log = new();
 
@@ -92,16 +93,25 @@ namespace UI.ViewModels.RunAndDisplay
             }
         }
 
-        public RunViewModel(GraphEditorViewModel editor, IDialogService dialogs)
+        public RunViewModel(GraphEditorViewModel editor, IDialogService dialogs, OffsetDispatcher dispatcher)
         {
             _editor = editor;
             _dialogs = dialogs;
+            _dispatcher = dispatcher;
             _ui = SynchronizationContext.Current ?? new SynchronizationContext();
 
             Results.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasResults));
 
             // Chọn node khác thì khung "Ảnh xử lý" đổi theo
             _editor.SelectedNodeChanged += (_, _) => UpdateViewers();
+        }
+
+        /// <summary>Bỏ ảnh và kết quả của lần chạy trước (khi đổi sang graph khác).</summary>
+        public void Reset()
+        {
+            ClearDisplay();
+            Results.Clear();
+            StatusText = "Sẵn sàng";
         }
 
         // ================= LỆNH =================
@@ -168,6 +178,15 @@ namespace UI.ViewModels.RunAndDisplay
                 AppendLog(StatusText);
 
                 UpdateViewers();
+
+                // Chạy thật: gửi độ bù (hoặc NG) cho robot. Chạy thử / học mẫu thì bộ gửi tự bỏ qua.
+                var sent = await _dispatcher.DispatchAsync(graph, run, mode, ct);
+                if (mode == RunMode.Live || sent.Attempted)
+                {
+                    AppendLog((sent.Success ? "[robot] " : "[robot - LỖI] ") + sent.Message);
+                    StatusText += sent.Success ? " | Robot: OK" : " | Robot: LỖI";
+                    if (!sent.Success) _dialogs.ShowError(sent.Message);
+                }
             }
             catch (OperationCanceledException)
             {

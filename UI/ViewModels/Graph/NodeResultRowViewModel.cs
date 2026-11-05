@@ -5,7 +5,7 @@ using Vision.Core;
 using Vision.Execution;
 using Vision.Graph;
 
-namespace UI.Models
+namespace UI.ViewModels.Graph
 {
     /// <summary>Một dòng ở tab "Kết quả": chỉ chứa chữ, an toàn để giữ lâu (không giữ object Halcon).</summary>
     public sealed class NodeResultRowViewModel
