@@ -1,3 +1,4 @@
+using Communication.Camera;
 using Communication.Configuration;
 using Communication.Mitsubishi;
 using Communication.Simulated;
@@ -21,6 +22,8 @@ namespace Communication.Drivers
                     return catalog.IsMeantToConnect(d) ? MitsubishiPlc.FromConfig(d) : new SimulatedPlc();
                 case DeviceType.Robot:
                     return catalog.IsMeantToConnect(d) ? MitsubishiRobot.FromConfig(d) : new SimulatedRobot();
+                case DeviceType.Camera:
+                    return catalog.IsMeantToConnect(d) ? HalconCamera.FromConfig(d) : null;
                 case DeviceType.Fixture:
                 case DeviceType.PC:
                     var tcp = catalog.GetTcpOptions(d);
@@ -37,6 +40,7 @@ namespace Communication.Drivers
             return d.Type switch
             {
                 DeviceType.PLC or DeviceType.Robot => true,
+                DeviceType.Camera => catalog.IsMeantToConnect(d),
                 DeviceType.Fixture or DeviceType.PC => catalog.GetTcpOptions(d) != null,
                 _ => false
             };
@@ -56,6 +60,8 @@ namespace Communication.Drivers
                 case DeviceType.PC:
                     if (!catalog.IsMeantToConnect(d)) return "Giả lập";
                     return $"TCP {d.GetString(DeviceSchemas.KeyIp)}:{d.GetInt(DeviceSchemas.KeyPort)}";
+                case DeviceType.Camera:
+                    return catalog.IsMeantToConnect(d) ? $"GigE Vision {d.GetString("DeviceId")}" : "Chưa nối";
                 default:
                     return "Chưa có code kết nối";
             }

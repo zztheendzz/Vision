@@ -82,7 +82,7 @@ namespace Vision.Runtime
 
                     run = await Task.Run(() => _executor.Run(_graph, options, cancellationToken), cancellationToken);
 
-                    (verdict, message) = Evaluate(run);
+                    (verdict, message) = CycleRecordBuilder.Evaluate(_graph, run);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -100,7 +100,7 @@ namespace Vision.Runtime
 
                 var record = new CycleRecord(
                     id, startedAt, stopwatch.ElapsedMilliseconds, verdict, message,
-                    productCode, Mode, CollectValues(run), BuildNodeLines(run));
+                    productCode, Mode, CycleRecordBuilder.CollectValues(_graph, run), CycleRecordBuilder.BuildNodeLines(_graph, run));
 
                 _logger.Info($"#{record.Id} {record.Verdict} ({record.DurationMs} ms) {record.Message}");
 
@@ -115,31 +115,6 @@ namespace Vision.Runtime
 
         /// <summary>Gọi khi đồ thị đã bị sửa (thêm node...) để lần chạy sau khởi tạo lại các tool.</summary>
         public void InvalidateGraph() => _ready = false;
-
-        // ================= KẾT LUẬN =================
-
-        private (RunVerdict Verdict, string Message) Evaluate(GraphRunResult run)
-        {
-            string? noResultMessage = null;
-
-            foreach (var node in _graph.Nodes)
-            {
-                var nodeRun = run[node];
-                var status = nodeRun.Result?.Status;
-
-                // Lỗi cấu hình hoặc lỗi hệ thống ở bất kỳ node nào thì kết luận ngay là Error
-                if (status == ResultStatus.ConfigError || status == ResultStatus.SystemError)
-                    return (RunVerdict.Error, $"{node.ToolName}: {nodeRun.Message}");
-
-                // Node chạy tốt nhưng không có kết quả (không thấy vật...): nhớ node đầu tiên
-                if (status == ResultStatus.NoResult && noResultMessage == null)
-                    noResultMessage = $"{node.ToolName}: {nodeRun.Message}";
-            }
-
-            return noResultMessage != null
-                ? (RunVerdict.Ng, noResultMessage)
-                : (RunVerdict.Ok, "Hoàn tất");
-        }
 
         // ================= HỖ TRỢ =================
 
@@ -162,37 +137,6 @@ namespace Vision.Runtime
                 }
             }
             _ready = true;
-        }
-
-        /// <summary>Gom các giá trị mà node ghi vào Values, thêm tên tool phía trước để không trùng nhau.</summary>
-        private IReadOnlyDictionary<string, string> CollectValues(GraphRunResult? run)
-        {
-            var values = new Dictionary<string, string>();
-            if (run == null) return values;
-
-            foreach (var node in _graph.GetTopologicalOrder())
-            {
-                var result = run[node].Result;
-                if (result == null) continue;
-
-                foreach (var pair in result.Values)
-                    values[$"{node.ToolName}.{pair.Key}"] = pair.Value;
-            }
-            return values;
-        }
-
-        private IReadOnlyList<string> BuildNodeLines(GraphRunResult? run)
-        {
-            if (run == null) return Array.Empty<string>();
-
-            return _graph.Nodes
-                .Select(node =>
-                {
-                    var nodeRun = run[node];
-                    string text = $"{node.ToolName}: {nodeRun.Status} ({nodeRun.ElapsedMs} ms)";
-                    return string.IsNullOrEmpty(nodeRun.Message) ? text : $"{text} - {nodeRun.Message}";
-                })
-                .ToList();
         }
 
         private void Publish(CycleRecord record, GraphRunResult? run)

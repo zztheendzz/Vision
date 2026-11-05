@@ -22,6 +22,7 @@
         <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveRecipeAsCommand}" />
         <KeyBinding Key="Delete" Command="{Binding Editor.DeleteSelectedCommand}" />
         <KeyBinding Key="F5" Command="{Binding Run.RunOnceCommand}" />
+        <KeyBinding Key="F6" Command="{Binding Run.RunFromCameraCommand}" />
         <KeyBinding Key="F5" Modifiers="Shift" Command="{Binding Run.StopCommand}" />
     </Window.InputBindings>
 
@@ -64,6 +65,8 @@
             </MenuItem>
             <MenuItem Header="_Chạy">
                 <MenuItem Header="Chạy một lần" InputGestureText="F5" Command="{Binding Run.RunOnceCommand}" />
+                <MenuItem Header="Chạy từ camera" InputGestureText="F6" Command="{Binding Run.RunFromCameraCommand}" />
+                <MenuItem Header="Học mẫu từ camera" Command="{Binding Run.TeachFromCameraCommand}" />
                 <MenuItem Header="Học mẫu" Command="{Binding Run.TeachCommand}" />
                 <MenuItem IsEnabled="False" Header="Chạy liên tục" InputGestureText="Ctrl+F5" />
                 <MenuItem Header="Dừng" InputGestureText="Shift+F5" Command="{Binding Run.StopCommand}" />
@@ -102,6 +105,14 @@
 
                 <Button Content="&#9654; Chạy một lần" Command="{Binding Run.RunOnceCommand}" />
                 <Button Content="Học mẫu" Command="{Binding Run.TeachCommand}" />
+                <Button Content="&#128247; Chạy từ camera" Command="{Binding Run.RunFromCameraCommand}"
+                        ToolTip="Chụp ảnh từ camera đang kết nối, chạy đồ thị rồi lưu kết quả (F6)" />
+                <Button Content="Học mẫu từ camera" Command="{Binding Run.TeachFromCameraCommand}" />
+                <Button Content="{Binding Run.AutoButtonText}" Command="{Binding Run.ToggleAutoCommand}"
+                        ToolTip="Chạy tự động mỗi khi PLC báo (bit yêu cầu chụp lên 1), rồi báo kết quả về PLC" />
+                <CheckBox Content="Lưu vào" IsChecked="{Binding Run.SaveResults}" VerticalAlignment="Center" Margin="8,0,4,0"
+                          ToolTip="Lưu ảnh và kết quả mỗi lần chạy từ camera" />
+                <TextBox Text="{Binding Run.SaveFolder, UpdateSourceTrigger=LostFocus}" Width="130" VerticalAlignment="Center" />
                 <Button IsEnabled="False" Content="&#10227; Chạy liên tục" />
                 <Button Content="&#9632; Dừng" Command="{Binding Run.StopCommand}" />
                 <Rectangle Width="1" Fill="{StaticResource VsBorderBrush}" Margin="6,2" />

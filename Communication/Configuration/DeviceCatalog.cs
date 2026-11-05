@@ -96,13 +96,14 @@ namespace Communication.Configuration
 
         /// <summary>
         /// Thiết bị này có nối thật không (không phải mô phỏng).
-        /// PLC / Robot: Chế độ = Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera, Máy quét: chưa nối qua đây.
+        /// PLC / Robot: Chế độ = Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera: giao thức GigE Vision. Máy quét: chưa nối.
         /// </summary>
         public bool IsMeantToConnect(DeviceConfig d) => d.Type switch
         {
             DeviceType.PLC or DeviceType.Robot => d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Mitsubishi,
             DeviceType.Fixture => GetGroupValue(d.Type, DeviceSchemas.KeyMode) != DeviceSchemas.Simulated,
             DeviceType.PC => GetGroupValue(d.Type, DeviceSchemas.KeyMode) == "TCP Client",
+            DeviceType.Camera => d.GetString("Protocol") == DeviceSchemas.GigE,
             _ => false
         };
 

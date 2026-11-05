@@ -52,7 +52,7 @@ namespace UI.ViewModels
             Editor = new GraphEditorViewModel(BuildDemoGraph(), dialogs);
             Toolbox = new ToolboxViewModel();
             Properties = new PropertyPanelViewModel();
-            Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager));
+            Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager), Devices.Manager);
             Roi = new RoiEditorViewModel(Editor, Properties);
 
             // Chọn node nào trên đồ thị thì bảng thuộc tính hiển thị tham số của node đó
@@ -211,7 +211,7 @@ namespace UI.ViewModels
         private static VisionGraph BuildDemoGraph()
         {
             var g = new VisionGraph();
-
+   // rẽ nhánh
             return g;
         }
 

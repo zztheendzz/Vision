@@ -1,3 +1,4 @@
+using Communication.Camera;
 using Communication.Configuration;
 
 namespace Communication.Drivers
@@ -51,6 +52,9 @@ namespace Communication.Drivers
         /// <summary>Robot đang nối, theo thứ tự trong danh sách thiết bị.</summary>
         public IReadOnlyList<(DeviceConfig Config, IRobotDriver Driver)> ConnectedRobots()
             => Connected<IRobotDriver>(DeviceType.Robot);
+
+        public IReadOnlyList<(DeviceConfig Config, HalconCamera Camera)> ConnectedCameras()
+            => Connected<HalconCamera>(DeviceType.Camera);
 
         public IReadOnlyList<(DeviceConfig Config, IPlcDriver Driver)> ConnectedPlcs()
             => Connected<IPlcDriver>(DeviceType.PLC);

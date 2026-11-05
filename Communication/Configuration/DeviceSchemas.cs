@@ -38,6 +38,7 @@ namespace Communication.Configuration
 
         public const string Simulated = "Simulated";
         public const string Mitsubishi = "Mitsubishi";
+        public const string GigE = "GigE Vision";
 
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
@@ -67,10 +68,10 @@ namespace Communication.Configuration
                 HasPlcSource = true, DefaultEnabled = false,
                 DeviceFields = new[]
                 {
-                    Choice("Protocol", "Giao thức truyền thông", "GigE Vision", new[] { "GigE Vision", "USB3 Vision", Simulated }, "Kết nối"),
-                    Txt("DeviceId", "Thiết bị", "", "Kết nối", "Số seri hoặc tên camera"),
+                    Choice("Protocol", "Giao thức truyền thông", GigE, new[] { GigE, Simulated }, "Kết nối"),
+                    Txt("DeviceId", "Thiết bị", "default", "Kết nối", "Tên camera lấy từ nút Quét; \"default\" = camera đầu tiên"),
                     Choice("ColorSpace", "Không gian màu", "Mono", new[] { "Mono", "RGB" }, "Ảnh"),
-                    Choice("Trigger", "Kiểu trigger", "Software", new[] { "Software", "Hardware", "Liên tục" }, "Ảnh"),
+                    Choice("Trigger", "Kiểu trigger", "Liên tục", new[] { "Liên tục", "Software", "Hardware" }, "Ảnh"),
                     Choice("PixelFormat", "Định dạng pixel", "Mono8", new[] { "Mono8", "Mono12", "BayerRG8", "RGB8" }, "Ảnh"),
                     Int("HeartbeatMs", "Heartbeat (ms)", 3000, 100, 600000, "GigE"),
                     Int("PacketSize", "Packet size (B)", 1500, 576, 16000, "GigE"),
@@ -127,7 +128,11 @@ namespace Communication.Configuration
                     Addr("ErrorBit", "Bit Error", "I693"),
                     Addr("PickOnlyBit", "Bit pick-only", ""),
                     Addr("GDecodeReg", "G-Decode Reg", ""),
-                    Addr("CameraTrigger", "Trigger camera", ""),
+                    Addr("CameraTrigger", "Bit PLC yêu cầu chụp", ""),
+                    Addr("DoneBit", "Bit vision xong (báo PLC)", ""),
+                    Addr("OkBit", "Bit kết quả OK (báo PLC)", ""),
+                    Addr("NgBit", "Bit kết quả NG (báo PLC)", ""),
+                    Addr("VisionErrBit", "Bit lỗi vision (báo PLC)", ""),
                     Addr("FovReg", "Thanh ghi FOV", "D600"),
                     Addr("RunBit", "Bit chạy", "L1000"),
                 }

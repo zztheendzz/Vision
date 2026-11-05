@@ -147,6 +147,16 @@
 
                                                 <local:FieldsEditor Fields="{Binding Fields}" />
 
+                                                <!-- Camera: quét danh sách để chọn thiết bị -->
+                                                <StackPanel Orientation="Horizontal" Margin="190,8,0,0"
+                                                            Visibility="{Binding IsCamera, Converter={StaticResource BoolToVis}}">
+                                                    <Button Content="Quét camera" Style="{StaticResource OutlineButton}"
+                                                            Command="{Binding ScanCamerasCommand}" />
+                                                    <ComboBox MinWidth="220" Margin="8,0,0,0"
+                                                              ItemsSource="{Binding FoundCameras}"
+                                                              SelectedItem="{Binding SelectedFound, Mode=TwoWay}" />
+                                                </StackPanel>
+
                                                 <!-- Kết nối thử -->
                                                 <TextBlock Text="Kết nối" FontWeight="SemiBold" Margin="0,18,0,6"
                                                            Foreground="{StaticResource VsAccentBrush}" />
@@ -158,13 +168,57 @@
                                                             Command="{Binding DisconnectCommand}" />
                                                     <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="12,0,0,0" />
                                                 </StackPanel>
-                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <!-- Thông báo ngay dưới nút Kết nối để luôn nhìn thấy (không bị đẩy xuống dưới khung xem trước) -->
+                                                <TextBlock Text="{Binding Message}" Margin="0,8,0,0" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource VsAccentBrush}" TextWrapping="Wrap" />
+                                                <!-- PLC: đọc thử một bit / một thanh ghi để kiểm tra kết nối và địa chỉ -->
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                                                            Visibility="{Binding IsPlc, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="Đọc thử:" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                               Foreground="{StaticResource VsMutedBrush}" />
+                                                    <TextBox Text="{Binding ReadAddress, UpdateSourceTrigger=PropertyChanged}" Width="100" />
+                                                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}"
+                                                            IsEnabled="{Binding IsConnected}" Command="{Binding ReadBitCommand}" />
+                                                    <Button Content="Đọc thanh ghi" Style="{StaticResource OutlineButton}"
+                                                            IsEnabled="{Binding IsConnected}" Command="{Binding ReadWordCommand}" />
+                                                </StackPanel>
+
+                                                <!-- Camera: xem trực tiếp / chụp, khung xem trước -->
+                                                <StackPanel Visibility="{Binding IsCamera, Converter={StaticResource BoolToVis}}">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                        <Button Style="{StaticResource OutlineButton}"
+                                                                IsEnabled="{Binding IsConnected}"
+                                                                Command="{Binding ToggleLiveCommand}">
+                                                            <Button.Content>
+                                                                <TextBlock>
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Text" Value="Xem trực tiếp" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsLive}" Value="True">
+                                                                                    <Setter Property="Text" Value="Dừng xem" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Button.Content>
+                                                        </Button>
+                                                        <Button Content="Chụp" Style="{StaticResource OutlineButton}"
+                                                                IsEnabled="{Binding IsConnected}"
+                                                                Command="{Binding SnapCommand}" />
+                                                    </StackPanel>
+                                                    <local:ImageViewerPanel Title="Xem trước camera"
+                                                                            Display="{Binding Preview}"
+                                                                            Height="340" Margin="0,8,0,0" />
+                                                </StackPanel>
+
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                                                            Visibility="{Binding CanSendText, Converter={StaticResource BoolToVis}}">
                                                     <TextBox Text="{Binding TestText, UpdateSourceTrigger=PropertyChanged}" Width="260" />
                                                     <Button Content="Gửi thử" Style="{StaticResource OutlineButton}"
                                                             Command="{Binding SendTestCommand}" />
                                                 </StackPanel>
-                                                <TextBlock Text="{Binding Message}" Margin="0,6,0,0"
-                                                           Foreground="{StaticResource VsMutedBrush}" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ContentControl.ContentTemplate>

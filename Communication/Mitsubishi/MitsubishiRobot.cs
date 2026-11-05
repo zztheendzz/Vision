@@ -121,9 +121,9 @@ namespace Communication.Mitsubishi
 
         private void LibConnect()
         {
-            var robot = new MelfaRobot("ip",10001);
+            var robot = new MelfaRobot(_s.Ip, _s.Port);
             robot.Connect();
-            robot.Open("name");
+          //  robot.Open($"robot{_s.RobotNo}");
             if (_s.EnableOnConnect)
             {
                 robot.OperationEnabled=true;
