@@ -39,6 +39,13 @@ namespace Communication.Configuration
         public const string Simulated = "Simulated";
         public const string Mitsubishi = "Mitsubishi";
         public const string GigE = "GigE Vision";
+        /// <summary>PLC Mitsubishi qua MX Component (COM); dùng tạm để thử với GX Simulator3.</summary>
+        public const string MxComponent = "MX Component";
+
+        /// <summary>Robot: gửi độ lệch (dX, dY, dRz) vào biến điểm trung gian; chương trình robot tự cộng vào điểm.</summary>
+        public const string RobotSendOffset = "Gửi độ lệch (điểm trung gian)";
+        /// <summary>Robot: app tính điểm mới rồi ghi đè lên điểm đã chọn.</summary>
+        public const string RobotSendOverwrite = "Ghi đè điểm đã tính";
 
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
@@ -113,7 +120,10 @@ namespace Communication.Configuration
                 HasPlcSource = false, DefaultEnabled = true,
                 DeviceFields = new[]
                 {
-                    Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, Simulated }, "Kết nối"),
+                    Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, MxComponent, Simulated }, "Kết nối"),
+                    new FieldDef("StationNo", "Số trạm logic (MX Component)", FieldKind.Integer, "1", "Kết nối", Min: 0, Max: 1024,
+                                 Hint: "Tạo trong Communication Setting Utility (GX Simulator3 hoặc PLC thật)")
+                        { ShowWhenKey = KeyMode, ShowWhenValue = MxComponent },
                     WhenMitsubishi(Ip(KeyIp, "IP", "192.168.0.195")),
                     WhenMitsubishi(Int(KeyPort, "Cổng", 3006, 1, 65535, "Kết nối")),
                     WhenMitsubishi(Choice("Frame", "Khung dữ liệu", "Binary", new[] { "Binary", "Ascii" }, "Kết nối")),
@@ -149,14 +159,23 @@ namespace Communication.Configuration
                     WhenMitsubishi(Int(KeyPort, "Cổng (đã đặt ở bộ điều khiển)", 10009, 1, 65535, "Kết nối")),
                     WhenMitsubishi(Int("RobotNo", "Số robot", 1, 1, 3, "Kết nối")),
                     WhenMitsubishi(Txt("ClientName", "Tên phiên làm việc", "VisionApp", "Kết nối")),
-                    WhenMitsubishi(Bool("EnableOnConnect", "Bật điều khiển + servo khi kết nối", false, "An toàn",
-                        "Tắt là an toàn: chương trình không tự bật servo robot")),
-                    WhenMitsubishi(Txt("OffsetCommand", "Lệnh gửi độ bù", "P_OFS=({dx},{dy},0,0,0,{drz})", "Độ bù",
-                        "{dx} {dy} (mm), {drz} (độ), {id} = số chu kỳ. CHƯA kiểm chứng: thử trên RT ToolBox")),
+                    WhenMitsubishi(Bool("TakeControl", "Chiếm quyền điều khiển khi kết nối", false, "Điều khiển",
+                        "Bật quyền điều khiển, dừng chương trình đang chạy và reset. Cần để đọc/ghi điểm của chương trình")),
+                    WhenMitsubishi(Bool("EnableOnConnect", "Bật servo khi kết nối", false, "Điều khiển",
+                        "Tắt là an toàn: chương trình không tự bật servo robot. Bật ô này cũng chiếm quyền điều khiển")),
+                    Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendOverwrite }, "Độ bù"),
+                    Txt("TargetPoint", "Điểm cần bù", "P1", "Độ bù",
+                        "Chọn từ danh sách đọc ở nút 'Đọc danh sách điểm'. Dùng cho chế độ ghi đè điểm"),
+                    Txt("PointProgram", "Chương trình chứa điểm", "", "Độ bù",
+                        "Tên chương trình robot có các điểm P1, P2... (đọc/ghi điểm qua chương trình này; không được đang chạy)"),
+                    Txt("OffsetPoint", "Biến điểm trung gian (toàn cục)", "P_VOFS", "Độ bù",
+                        "Chế độ độ lệch: ghi (dX,dY,0,0,0,dRz) vào biến toàn cục này bằng lệnh EXEC; chương trình robot cộng vào điểm"),
+                    Choice("RzAxis", "Trục xoay Rz của điểm", "C", new[] { "A", "B", "C" }, "Độ bù"),
+                    Int("PointCount", "Số điểm quét (P1..Pn)", 20, 1, 200, "Độ bù", "Khi đọc danh sách, thử lần lượt P1 đến Pn"),
                     WhenMitsubishi(Txt("RejectCommand", "Lệnh báo NG", "", "Độ bù",
                         "Để trống = chưa cấu hình, chương trình sẽ báo lỗi khi cần báo NG")),
-                    WhenMitsubishi(Num("MaxOffsetMm", "Giới hạn gửi lệch (mm)", "50", 0.1, 1000, "An toàn")),
-                    WhenMitsubishi(Num("MaxOffsetDeg", "Giới hạn gửi góc (độ)", "30", 0.1, 360, "An toàn")),
+                    Num("MaxOffsetMm", "Giới hạn gửi lệch (mm)", "50", 0.1, 1000, "An toàn"),
+                    Num("MaxOffsetDeg", "Giới hạn gửi góc (độ)", "30", 0.1, 360, "An toàn"),
                     Addr("IoEnaBit", "IOENA", "M305"),
                     Txt("Model3d", "Model 3D", "", "Hiển thị", "Đường dẫn file model"),
                 }

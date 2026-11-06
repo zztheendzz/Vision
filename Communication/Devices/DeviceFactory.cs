@@ -19,9 +19,14 @@ namespace Communication.Drivers
             switch (d.Type)
             {
                 case DeviceType.PLC:
-                    return catalog.IsMeantToConnect(d) ? MitsubishiPlc.FromConfig(d) : new SimulatedPlc();
+                    return d.GetString(DeviceSchemas.KeyMode) switch
+                    {
+                        DeviceSchemas.Mitsubishi => MitsubishiPlc.FromConfig(d),
+                        DeviceSchemas.MxComponent => MitsubishiMxPlc.FromConfig(d),
+                        _ => new SimulatedPlc()
+                    };
                 case DeviceType.Robot:
-                    return catalog.IsMeantToConnect(d) ? MitsubishiRobot.FromConfig(d) : new SimulatedRobot();
+                    return catalog.IsMeantToConnect(d) ? MitsubishiRobot.FromConfig(d) : SimulatedRobot.FromConfig(d);
                 case DeviceType.Camera:
                     return catalog.IsMeantToConnect(d) ? HalconCamera.FromConfig(d) : null;
                 case DeviceType.Fixture:
@@ -54,6 +59,8 @@ namespace Communication.Drivers
                 case DeviceType.PLC:
                 case DeviceType.Robot:
                     if (!catalog.IsMeantToConnect(d)) return "Giả lập";
+                    if (d.Type == DeviceType.PLC && d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.MxComponent)
+                        return $"MX Component trạm {d.GetInt("StationNo", 1)}";
                     string brand = d.Type == DeviceType.PLC ? "Mitsubishi MC" : "Mitsubishi MELFA";
                     return $"{brand} {d.GetString(DeviceSchemas.KeyIp)}:{d.GetInt(DeviceSchemas.KeyPort)}";
                 case DeviceType.Fixture:

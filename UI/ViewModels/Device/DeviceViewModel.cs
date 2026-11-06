@@ -42,6 +42,7 @@ namespace UI.ViewModels.Device
                         foreach (var f in Fields) f.RefreshVisibility();   // đổi Hãng / Kiểu truyền thông thì ẩn-hiện ô liên quan
                         OnPropertyChanged(nameof(Summary));
                         OnPropertyChanged(nameof(CanConnect));
+                        OnPropertyChanged(nameof(IsSimulatedPlc));
                         _owner.MarkDirty();
                     },
                     config.GetString))
@@ -55,6 +56,11 @@ namespace UI.ViewModels.Device
         public bool IsPlc => Config.Type == DeviceType.PLC;
         public bool IsCamera => Config.Type == DeviceType.Camera;
         public bool IsNotCamera => !IsCamera;
+        public bool IsRobot => Config.Type == DeviceType.Robot;
+        /// <summary>Có tab "Thử nghiệm" không (robot dùng tab "Điều khiển" riêng).</summary>
+        public bool HasTestTab => IsPlc || IsCamera || CanSendText;
+        /// <summary>PLC chạy chế độ Simulated (trong bộ nhớ): cho phép đặt bit bằng tay để thử luồng tự động.</summary>
+        public bool IsSimulatedPlc => IsPlc && Config.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Simulated;
         /// <summary>Có ô "Gửi thử" chữ không (chỉ thiết bị nói chuyện bằng chữ qua TCP).</summary>
         public bool CanSendText => Config.Type is DeviceType.Fixture or DeviceType.PC;
 
@@ -252,6 +258,28 @@ namespace UI.ViewModels.Device
             }
         }
 
+        [RelayCommand]
+        private Task WriteBitOnAsync() => WriteSimulatedBitAsync(true);
+
+        [RelayCommand]
+        private Task WriteBitOffAsync() => WriteSimulatedBitAsync(false);
+
+        // Chỉ cho ghi vào PLC giả lập: ghi vào PLC thật từ ô thử có thể làm máy chạy ngoài ý muốn
+        private async Task WriteSimulatedBitAsync(bool value)
+        {
+            if (!IsSimulatedPlc) { Message = "Chỉ ghi thử được với PLC chế độ Simulated"; return; }
+            if (!TryGetPlc(out var plc, out string address)) return;
+            try
+            {
+                await plc.WriteBitAsync(address, value);
+                Message = $"Đã ghi bit {address} = {(value ? 1 : 0)}";
+            }
+            catch (Exception ex)
+            {
+                Message = $"Ghi bit {address} lỗi: {ex.Message}";
+            }
+        }
+
         private bool TryGetPlc(out IPlcDriver plc, out string address)
         {
             plc = null!;
@@ -269,6 +297,131 @@ namespace UI.ViewModels.Device
             }
             plc = driver;
             return true;
+        }
+
+        // ---------- Robot: danh sách điểm, chọn điểm cần bù ----------
+
+        [ObservableProperty] private string? _selectedPoint;
+        public ObservableCollection<string> RobotPoints { get; } = new();
+
+        partial void OnSelectedPointChanged(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            var field = Fields.FirstOrDefault(f => f.Def.Key == "TargetPoint");
+            if (field != null) field.Text = value;          // ghi vào cấu hình + đánh dấu đã sửa
+        }
+
+        private bool TryGetRobot(out IRobotDriver robot)
+        {
+            robot = null!;
+            if (_owner.Manager.GetLink(Id) is not IRobotDriver driver || !driver.IsConnected)
+            {
+                Message = "Chưa kết nối robot";
+                return false;
+            }
+            robot = driver;
+            return true;
+        }
+
+        // Điều khiển robot: chiếm/trả quyền, dừng + reset, servo
+        private async Task ControlAsync(Func<IRobotDriver, Task<RobotReply>> action)
+        {
+            if (!TryGetRobot(out var robot)) return;
+            var reply = await action(robot);
+            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Lệnh điều khiển thất bại";
+        }
+
+        [RelayCommand] private Task TakeControlAsync() => ControlAsync(r => r.TakeControlAsync(stopAndReset: true));
+        [RelayCommand] private Task ReleaseControlAsync() => ControlAsync(r => r.ReleaseControlAsync());
+        [RelayCommand] private Task StopAndResetAsync() => ControlAsync(r => r.StopAndResetAsync());
+        [RelayCommand] private Task ServoOnAsync() => ControlAsync(r => r.SetServoAsync(true));
+        [RelayCommand] private Task ServoOffAsync() => ControlAsync(r => r.SetServoAsync(false));
+
+        // Điều khiển thủ công: nhích X, Y, Z, Rz theo bước đã chọn
+        public double[] JogStepsMm { get; } = { 0.1, 0.5, 1, 5, 10, 20 };
+        public double[] JogStepsDeg { get; } = { 0.1, 0.5, 1, 5, 10 };
+        [ObservableProperty] private double _jogStepMm = 1;
+        [ObservableProperty] private double _jogStepDeg = 1;
+        [ObservableProperty] private int _speedPercent = 10;
+        [ObservableProperty] private string _positionText = "";
+
+        /// <summary>axis: "X+", "X-", "Y+", "Y-", "Z+", "Z-", "R+", "R-" (R = xoay Rz).</summary>
+        [RelayCommand]
+        private async Task JogAsync(string? axis)
+        {
+            if (string.IsNullOrEmpty(axis) || axis.Length != 2) return;
+            if (!TryGetRobot(out var robot)) return;
+
+            double sign = axis[1] == '-' ? -1 : 1;
+            double dx = 0, dy = 0, dz = 0, drz = 0;
+            switch (char.ToUpperInvariant(axis[0]))
+            {
+                case 'X': dx = sign * JogStepMm; break;
+                case 'Y': dy = sign * JogStepMm; break;
+                case 'Z': dz = sign * JogStepMm; break;
+                case 'R': drz = sign * JogStepDeg; break;
+                default: return;
+            }
+
+            // Đặt tốc độ chậm trước mỗi lần nhích (mặc định 10 %)
+            var speed = await robot.SetSpeedAsync(SpeedPercent);
+            if (!speed.Accepted) { Message = speed.Error ?? "Không đặt được tốc độ"; return; }
+
+            var reply = await robot.MoveRelativeAsync(dx, dy, dz, drz);
+            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Lệnh di chuyển thất bại";
+            if (reply.Accepted)
+            {
+                await Task.Delay(600);        // lệnh không chờ robot đến nơi: đợi một chút rồi đọc lại vị trí
+                PositionText = await robot.GetPositionTextAsync();
+            }
+        }
+
+        [RelayCommand]
+        private async Task RefreshPositionAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            PositionText = await robot.GetPositionTextAsync();
+        }
+
+        [RelayCommand]
+        private async Task ApplySpeedAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            var reply = await robot.SetSpeedAsync(SpeedPercent);
+            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Không đặt được tốc độ";
+        }
+
+        [RelayCommand]
+        private async Task ReadPointListAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            Message = "Đang đọc danh sách điểm từ robot...";
+            try
+            {
+                var names = await robot.ListPointsAsync();
+                RobotPoints.Clear();
+                foreach (var n in names) RobotPoints.Add(n);
+
+                // Giữ điểm đã chọn trước đó nếu vẫn còn trong danh sách
+                string current = Config.GetString("TargetPoint");
+                SelectedPoint = names.Contains(current) ? current : null;
+                Message = $"Thấy {names.Count} điểm. Chọn điểm cần bù trong danh sách.";
+            }
+            catch (Exception ex)
+            {
+                Message = $"Đọc danh sách điểm lỗi: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private async Task ShowPointAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            string name = SelectedPoint ?? Config.GetString("TargetPoint");
+            if (string.IsNullOrWhiteSpace(name)) { Message = "Chọn một điểm trước"; return; }
+
+            var reply = await robot.ReadPointAsync(name.Trim());
+            Message = reply.Ok ? $"{name} = {reply.Point}" : $"Đọc điểm {name} lỗi: {reply.Error}";
         }
 
         // ---------- Camera: quét, xem trực tiếp, chụp ----------

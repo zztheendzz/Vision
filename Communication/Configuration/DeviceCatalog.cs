@@ -96,11 +96,12 @@ namespace Communication.Configuration
 
         /// <summary>
         /// Thiết bị này có nối thật không (không phải mô phỏng).
-        /// PLC / Robot: Chế độ = Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera: giao thức GigE Vision. Máy quét: chưa nối.
+        /// PLC: Chế độ Mitsubishi hoặc MX Component. Robot: Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera: giao thức GigE Vision. Máy quét: chưa nối.
         /// </summary>
         public bool IsMeantToConnect(DeviceConfig d) => d.Type switch
         {
-            DeviceType.PLC or DeviceType.Robot => d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Mitsubishi,
+            DeviceType.PLC => d.GetString(DeviceSchemas.KeyMode) is DeviceSchemas.Mitsubishi or DeviceSchemas.MxComponent,
+            DeviceType.Robot => d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Mitsubishi,
             DeviceType.Fixture => GetGroupValue(d.Type, DeviceSchemas.KeyMode) != DeviceSchemas.Simulated,
             DeviceType.PC => GetGroupValue(d.Type, DeviceSchemas.KeyMode) == "TCP Client",
             DeviceType.Camera => d.GetString("Protocol") == DeviceSchemas.GigE,
@@ -161,7 +162,8 @@ namespace Communication.Configuration
                     errors.Add($"{d.Name} – PLC nguồn không còn tồn tại.");
 
                 // Đã bật và nối thật thì phải có IP (và cổng) để nối
-                if (d.Enabled && IsMeantToConnect(d) && schema.FindDevice(DeviceSchemas.KeyIp) != null &&
+                var ipField = schema.FindDevice(DeviceSchemas.KeyIp);
+                if (d.Enabled && IsMeantToConnect(d) && ipField != null && ipField.IsVisible(d.GetString) &&
                     d.GetString(DeviceSchemas.KeyIp).Length == 0)
                     errors.Add($"{d.Name} – chưa nhập địa chỉ IP.");
             }
