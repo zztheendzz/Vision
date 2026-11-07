@@ -12,6 +12,7 @@ namespace UI
     {
         private readonly MainViewModel _viewModel;
         private DeviceConfigWindow? _deviceWindow;
+        private AutoCalibrationWindow? _autoCalWindow;
 
         public MainWindow()
         {
@@ -58,6 +59,24 @@ namespace UI
         private void OpenDeviceConfig_Click(object sender, RoutedEventArgs e)
         {
             OpenDeviceConfig();
+        }
+
+        /// <summary>Mở cửa sổ hiệu chuẩn tự động / chụp tại vị trí cố định (chỉ một cửa sổ).</summary>
+        private void OpenAutoCalibration_Click(object sender, RoutedEventArgs e)
+        {
+            if (_autoCalWindow != null)
+            {
+                _autoCalWindow.Activate();
+                return;
+            }
+
+            _autoCalWindow = new AutoCalibrationWindow
+            {
+                Owner = this,
+                DataContext = _viewModel.AutoCal
+            };
+            _autoCalWindow.Closed += (_, _) => _autoCalWindow = null;
+            _autoCalWindow.Show();
         }
     }
 }

@@ -14,6 +14,7 @@ using UI.ViewModels.Graph;
 using UI.ViewModels.RunAndDisplay;
 using Vision.Core;
 using Vision.Execution;
+using Vision.Geometry;
 using Vision.Graph;
 using Vision.Runtime;
 using Vision.Services;
@@ -320,6 +321,66 @@ namespace UI.ViewModels.RunAndDisplay
                 IsRunning = false;
             }
             return verdict;
+        }
+
+        /// <summary>
+        /// Chụp một ảnh từ camera đang nối, chạy đồ thị (chạy thử: không điều khiển thiết bị) rồi lấy Pose của node FindShape đầu tiên.
+        /// Dùng cho hiệu chuẩn tự động và "chụp tại vị trí cố định". Trả null nếu không thấy vật.
+        /// Ném InvalidOperationException nếu đang chạy, đồ thị không có FindShape, hoặc FindShape lỗi cấu hình/hệ thống.
+        /// Không chạm vào bảng kết quả hay ảnh đang hiển thị.
+        /// </summary>
+        public async Task<Pose2D?> MeasurePoseAsync(CancellationToken ct)
+        {
+            if (IsRunning || IsAuto)
+                throw new InvalidOperationException("Đồ thị đang chạy, chưa đo được lúc này.");
+
+            var graph = _editor.Model;
+            var node = graph.Nodes.FirstOrDefault(n => n.ToolName == "FindShape")
+                       ?? throw new InvalidOperationException("Đồ thị không có node Find Shape để đo vị trí vật.");
+
+            IsRunning = true;
+            _editor.IsLocked = true;
+            Dictionary<string, HImage>? sources = null;
+            GraphRunResult? run = null;
+            try
+            {
+                sources = await GrabFromCamerasAsync(ct);
+
+                var options = new RunOptions { Mode = RunMode.DryRun, NeedDisplay = false };
+                bool first = true;
+                foreach (var (name, image) in sources)
+                {
+                    options.SetSeed("Image@" + name, image);
+                    if (first) options.SetSeed("Image", image);
+                    first = false;
+                }
+
+                var logger = new UiLogger(PostLog);
+                var executor = new GraphExecutor(logger);
+                run = await Task.Run(() =>
+                {
+                    InitializeTools(graph, options, logger, ct);
+                    return executor.Run(graph, options, ct);
+                }, ct);
+
+                if (!run.Nodes.TryGetValue(node.Id, out var nodeRun) || nodeRun.Result == null)
+                    throw new InvalidOperationException("Node Find Shape không chạy.");
+
+                var status = nodeRun.Result.Status;
+                if (status is ResultStatus.ConfigError or ResultStatus.SystemError)
+                    throw new InvalidOperationException($"Find Shape bị lỗi: {nodeRun.Message}");
+                if (status != ResultStatus.Ok) return null;
+
+                return nodeRun.Result.TryGet<Pose2D>("Pose", out var pose) ? pose : null;
+            }
+            finally
+            {
+                run?.Dispose();
+                if (sources != null)
+                    foreach (var image in sources.Values) image.Dispose();
+                _editor.IsLocked = IsAuto;
+                IsRunning = false;
+            }
         }
 
         private async Task SaveCycleAsync(VisionGraph graph, GraphRunResult run, Dictionary<string, HImage> sources,

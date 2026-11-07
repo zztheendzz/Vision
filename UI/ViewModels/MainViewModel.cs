@@ -40,6 +40,9 @@ namespace UI.ViewModels
         /// <summary>Danh sách thiết bị (robot, PLC, PC, scanner...) và trạng thái kết nối.</summary>
         public DeviceConfigViewModel Devices { get; }
 
+        /// <summary>Hiệu chuẩn tự động bằng robot và chụp tại vị trí cố định.</summary>
+        public AutoCalibrationViewModel AutoCal { get; }
+
         /// <summary>Tạo file hiệu chuẩn camera - robot từ file CSV các cặp điểm.</summary>
         public IRelayCommand CalibrateFromCsvCommand { get; }
 
@@ -54,6 +57,7 @@ namespace UI.ViewModels
             Properties = new PropertyPanelViewModel();
             Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager), Devices.Manager);
             Roi = new RoiEditorViewModel(Editor, Properties);
+            AutoCal = new AutoCalibrationViewModel(Devices.Manager, Run, dialogs);
 
             // Chọn node nào trên đồ thị thì bảng thuộc tính hiển thị tham số của node đó
             Editor.SelectedNodeChanged += (_, _) => Properties.Node = Editor.SelectedNode;
@@ -211,7 +215,7 @@ namespace UI.ViewModels
         private static VisionGraph BuildDemoGraph()
         {
             var g = new VisionGraph();
-   // rẽ nhánh
+
             return g;
         }
 

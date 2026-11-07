@@ -1,0 +1,148 @@
+﻿<Window x:Class="UI.Views.AutoCalibrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UI.Views"
+        mc:Ignorable="d"
+        Title="AutoCalibrationWindow" Height="450" Width="800">
+    <Grid>
+        <DockPanel>
+
+            <!-- ================= THANH DƯỚI ================= -->
+            <Border DockPanel.Dock="Bottom" Background="{StaticResource VsPanelHeaderBrush}"
+                BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="Dừng" Width="90" Style="{StaticResource AccentButton}"
+                            Command="{Binding StopCommand}" />
+                        <Button Content="Đóng" Width="90" Style="{StaticResource OutlineButton}"
+                            Click="Close_Click" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource VsMutedBrush}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+            </Border>
+
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- File hiệu chuẩn dùng chung cho cả hai tab -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock Text="File hiệu chuẩn (calibration.json): tab 1 ghi vào đây, tab 2 đọc từ đây"
+                           Foreground="{StaticResource VsMutedBrush}" />
+                    <TextBox Text="{Binding CalibrationPath, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <TabControl Grid.Row="1" Margin="0,0,0,8">
+
+                    <!-- ============ TAB 1: HIỆU CHUẨN TỰ ĐỘNG ============ -->
+                    <TabItem Header="1. Hiệu chuẩn tự động">
+                        <StackPanel Margin="10">
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource VsMutedBrush}" Margin="0,0,0,8"
+                                   Text="Robot cầm mốc (hoặc vật) và tự đi qua lưới điểm quanh điểm tâm. Mỗi điểm: dừng hẳn, chụp, đo pixel, đọc vị trí robot. Cần: robot đã kết nối và đã chiếm quyền điều khiển, camera đã kết nối, đồ thị có node Find Shape nhìn thấy mốc." />
+
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,12,8" Width="200">
+                                    <TextBlock Text="Điểm tâm (để trống = vị trí hiện tại)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding CenterPoint, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Số điểm X" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding CountX, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Số điểm Y" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding CountY, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Bước lưới (mm)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding StepMm, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="200">
+                                    <TextBlock Text="Góc kiểm tra dấu (độ, phẩy)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding RotationsText, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Tốc độ (%)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding CalSpeedPercent, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Chờ ổn định (ms)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding CalSettleMs, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="RMS tối đa (mm)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding MaxRmsMm, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="130">
+                                    <TextBlock Text="Số điểm hợp lệ tối thiểu" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding MinValidPoints, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <Button Content="Bắt đầu hiệu chuẩn tự động" HorizontalAlignment="Left" Width="240"
+                                Style="{StaticResource AccentButton}"
+                                Command="{Binding StartCalibrationCommand}" />
+                        </StackPanel>
+                    </TabItem>
+
+                    <!-- ============ TAB 2: CHỤP TẠI VỊ TRÍ CỐ ĐỊNH ============ -->
+                    <TabItem Header="2. Chụp tại vị trí cố định">
+                        <StackPanel Margin="10">
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource VsMutedBrush}" Margin="0,0,0,8"
+                                   Text="Robot đi tới điểm chụp, chụp ảnh, tìm vật, đổi sang tọa độ robot qua file hiệu chuẩn rồi GHI vào điểm đích. X, Y và góc lấy từ ảnh; Z, A, B và cờ giữ nguyên từ điểm đích hiện có. Độ lệch so với điểm đích cũ bị chặn theo giới hạn trong cấu hình robot." />
+
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,12,8" Width="200">
+                                    <TextBlock Text="Điểm chụp (để trống = đứng yên)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding ShotPoint, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="200">
+                                    <TextBlock Text="Điểm ghi tọa độ (điểm gắp)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding TargetPoint, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="130">
+                                    <TextBlock Text="Cộng thêm vào góc (độ)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding RzOffsetDeg, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Tốc độ (%)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding ShotSpeedPercent, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Chờ ổn định (ms)" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding ShotSettleMs, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <CheckBox Content="Đảo chiều góc (nếu trục xoay của robot ngược chiều)"
+                                  IsChecked="{Binding InvertRz}" Margin="0,0,0,4" />
+                            <CheckBox Content="Ghi vào robot (bỏ chọn = chỉ đo và báo kết quả, để thử)"
+                                  IsChecked="{Binding SendToRobot}" Margin="0,0,0,8" />
+
+                            <Button Content="Chụp và gửi cho robot" HorizontalAlignment="Left" Width="240"
+                                Style="{StaticResource AccentButton}"
+                                Command="{Binding ShootAndSendCommand}" />
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
+
+                <!-- Nhật ký -->
+                <DockPanel Grid.Row="2">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}">
+                        <TextBlock Text="Nhật ký" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBox Text="{Binding LogText, Mode=OneWay}" IsReadOnly="True"
+                         FontFamily="Consolas" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         TextChanged="Log_TextChanged" />
+                </DockPanel>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</Window>
