@@ -205,7 +205,7 @@
                                                             </WrapPanel>
 
                                                             <!-- Nhích thủ công -->
-                                                            <TextBlock Text="Nhích thủ công (X, Y, Z, Rz)" FontWeight="SemiBold" Margin="0,18,0,6"
+                                                            <TextBlock Text="Nhích bằng mũi tên (X, Y, Z, Rz)" FontWeight="SemiBold" Margin="0,18,0,6"
                                                                        Foreground="{StaticResource VsAccentBrush}" />
                                                             <WrapPanel VerticalAlignment="Center">
                                                                 <TextBlock Text="Bước (mm)" VerticalAlignment="Center" Margin="0,0,6,0"
@@ -223,43 +223,82 @@
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding ApplySpeedCommand}" />
                                                             </WrapPanel>
 
-                                                            <Grid Margin="0,12,0,0" HorizontalAlignment="Left">
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="50" />
-                                                                    <ColumnDefinition Width="90" />
-                                                                    <ColumnDefinition Width="90" />
-                                                                </Grid.ColumnDefinitions>
-                                                                <Grid.RowDefinitions>
-                                                                    <RowDefinition Height="Auto" />
-                                                                    <RowDefinition Height="Auto" />
-                                                                    <RowDefinition Height="Auto" />
-                                                                    <RowDefinition Height="Auto" />
-                                                                </Grid.RowDefinitions>
+                                                            <!-- Bàn phím mũi tên: mỗi lần bấm nhích một bước theo ô "Bước" -->
+                                                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
 
-                                                                <TextBlock Grid.Row="0" Text="X" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                                <Button Grid.Row="0" Grid.Column="1" Content="X −" Height="34" Style="{StaticResource OutlineButton}"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="X-" />
-                                                                <Button Grid.Row="0" Grid.Column="2" Content="X +" Height="34" Style="{StaticResource OutlineButton}"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="X+" />
-
-                                                                <TextBlock Grid.Row="1" Text="Y" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                                <Button Grid.Row="1" Grid.Column="1" Content="Y −" Height="34" Style="{StaticResource OutlineButton}"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Y-" />
-                                                                <Button Grid.Row="1" Grid.Column="2" Content="Y +" Height="34" Style="{StaticResource OutlineButton}"
+                                                                <!-- X / Y -->
+                                                                <StackPanel>
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                        </Grid.RowDefinitions>
+                                                                        <Button Grid.Row="0" Grid.Column="1" Content="▲" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Y +"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Y+" />
+                                                                        <Button Grid.Row="1" Grid.Column="0" Content="◀" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="X −"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="X-" />
+                                                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="X / Y" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                                   Foreground="{StaticResource VsMutedBrush}" />
+                                                                        <Button Grid.Row="1" Grid.Column="2" Content="▶" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="X +"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="X+" />
+                                                                        <Button Grid.Row="2" Grid.Column="1" Content="▼" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Y −"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Y-" />
+                                                                    </Grid>
+                                                                    <TextBlock Text="◀ X−   X+ ▶   ▲ Y+   Y− ▼" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                                                               Foreground="{StaticResource VsMutedBrush}" />
+                                                                </StackPanel>
 
-                                                                <TextBlock Grid.Row="2" Text="Z" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                                <Button Grid.Row="2" Grid.Column="1" Content="Z −" Height="34" Style="{StaticResource OutlineButton}"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z-" />
-                                                                <Button Grid.Row="2" Grid.Column="2" Content="Z +" Height="34" Style="{StaticResource OutlineButton}"
+                                                                <!-- Z -->
+                                                                <StackPanel Margin="28,0,0,0">
+                                                                    <Grid>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                        </Grid.RowDefinitions>
+                                                                        <Button Grid.Row="0" Grid.Column="0" Content="▲" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z + (lên)"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z+" />
+                                                                        <TextBlock Grid.Row="1" Text="Z" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                                   Foreground="{StaticResource VsMutedBrush}" />
+                                                                        <Button Grid.Row="2" Grid.Column="0" Content="▼" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z − (xuống)"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z-" />
+                                                                    </Grid>
+                                                                    <TextBlock Text="Z+ lên / Z− xuống" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                                                               Foreground="{StaticResource VsMutedBrush}" />
+                                                                </StackPanel>
 
-                                                                <TextBlock Grid.Row="3" Text="Rz" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                                <Button Grid.Row="3" Grid.Column="1" Content="Rz −" Height="34" Style="{StaticResource OutlineButton}"
+                                                                <!-- Xoay Rz -->
+                                                                <StackPanel Margin="28,0,0,0">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Button Grid.Row="0" Grid.Column="0" Content="↻" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Rz − (xoay thuận chiều kim đồng hồ)"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="R-" />
-                                                                <Button Grid.Row="3" Grid.Column="2" Content="Rz +" Height="34" Style="{StaticResource OutlineButton}"
+                                                                        <Button Grid.Row="0" Grid.Column="1" Content="↺" Width="56" Height="42" FontSize="18"
+                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Rz + (xoay ngược chiều kim đồng hồ)"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="R+" />
-                                                            </Grid>
+                                                                    </Grid>
+                                                                    <TextBlock Text="Rz− ↻   ↺ Rz+" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                                                               Foreground="{StaticResource VsMutedBrush}" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <TextBlock Text="Chiều mũi tên theo hệ trục gốc của robot (X+, Y+, Z+ lên); đổi bước và tốc độ ở trên."
+                                                                       Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,6,0,0" />
 
                                                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                                                 <Button Content="Đọc vị trí" Style="{StaticResource OutlineButton}"
@@ -267,6 +306,49 @@
                                                                 <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" Margin="8,0,0,0"
                                                                            TextWrapping="Wrap" />
                                                             </StackPanel>
+
+                                                            <!-- Di chuyển tới tọa độ X, Y, Z, A, B, C -->
+                                                            <TextBlock Text="Di chuyển tới tọa độ" FontWeight="SemiBold" Margin="0,18,0,6"
+                                                                       Foreground="{StaticResource VsAccentBrush}" />
+                                                            <WrapPanel>
+                                                                <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="70" Text="{Binding TargetX, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="Y" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="70" Text="{Binding TargetY, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="Z" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="70" Text="{Binding TargetZ, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="A" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TargetA, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="B" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TargetB, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="C" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TargetC, UpdateSourceTrigger=LostFocus}" />
+                                                            </WrapPanel>
+                                                            <WrapPanel Margin="0,6,0,0">
+                                                                <Button Content="Lấy vị trí hiện tại" Style="{StaticResource OutlineButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding FillCurrentPositionCommand}" />
+                                                                <CheckBox Content="Đường thẳng (MVS)" IsChecked="{Binding MoveLinear}"
+                                                                          VerticalAlignment="Center" Margin="10,0,10,0"
+                                                                          ToolTip="Bỏ tick = nội suy khớp (MOV), đường đi có thể cong" />
+                                                                <Button Content="Di chuyển" Style="{StaticResource AccentButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding MoveToCoordinatesCommand}" />
+                                                            </WrapPanel>
+                                                            <TextBlock Text="X, Y, Z tính bằng mm; A, B, C bằng độ; hệ gốc robot. Cần chiếm quyền và bật servo."
+                                                                       Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,4,0,0" />
+
+                                                            <!-- Gửi thử độ lệch theo cách đã chọn ở tab Thông số -->
+                                                            <TextBlock Text="Gửi thử độ lệch" FontWeight="SemiBold" Margin="0,18,0,6"
+                                                                       Foreground="{StaticResource VsAccentBrush}" />
+                                                            <WrapPanel>
+                                                                <TextBlock Text="dX (mm)" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TestDx, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="dY (mm)" VerticalAlignment="Center" Margin="12,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TestDy, UpdateSourceTrigger=LostFocus}" />
+                                                                <TextBlock Text="dRz (°)" VerticalAlignment="Center" Margin="12,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                <TextBox Width="60" Text="{Binding TestDrz, UpdateSourceTrigger=LostFocus}" />
+                                                                <Button Content="Gửi thử" Style="{StaticResource OutlineButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding SendTestOffsetCommand}" />
+                                                            </WrapPanel>
 
                                                             <!-- Điểm: đọc danh sách từ chương trình, chọn điểm cần bù -->
                                                             <TextBlock Text="Điểm trong chương trình" FontWeight="SemiBold" Margin="0,18,0,6"
@@ -279,8 +361,17 @@
                                                                           SelectedItem="{Binding SelectedPoint, Mode=TwoWay}" />
                                                                 <Button Content="Xem giá trị" Style="{StaticResource OutlineButton}"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding ShowPointCommand}" />
+                                                                <Button Content="Đi tới điểm" Style="{StaticResource AccentButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding GoToPointCommand}"
+                                                                        ToolTip="Robot chuyển động thật tới điểm đã chọn (có hộp thoại xác nhận)" />
+                                                                <Button Content="Điền vào ô tọa độ" Style="{StaticResource OutlineButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding FillFromPointCommand}"
+                                                                        ToolTip="Điền tọa độ điểm vào mục 'Di chuyển tới tọa độ' để sửa trước khi đi" />
+                                                                <Button Content="Thử ghi lại" Style="{StaticResource OutlineButton}"
+                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding WritePointBackCommand}"
+                                                                        ToolTip="Đọc điểm rồi ghi lại đúng giá trị đó (điểm không đổi) để thử đường ghi" />
                                                             </WrapPanel>
-                                                            <TextBlock Text="Điểm chọn ở đây được ghi vào ô 'Điểm cần bù' ở tab Thông số."
+                                                            <TextBlock Text="Điểm chọn ở đây cũng là 'Điểm cần bù' ở tab Thông số. Đi tới điểm dùng kiểu đường đi (MVS/MOV) và tốc độ ở các mục phía trên."
                                                                        Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,4,0,0" />
                                                         </StackPanel>
                                                     </TabItem>

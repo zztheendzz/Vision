@@ -83,14 +83,17 @@ namespace UI.Services
                 if (settings.Mode == RobotSendMode.OverwritePoint)
                     return await OverwriteAsync(robot, robotCfg.Name, settings, offset, convention, note, cancellationToken);
 
-                // Chế độ 1: gửi độ lệch qua điểm trung gian, robot tự cộng
+                // Chế độ 1 (điểm trung gian) và chế độ gói tin: gửi độ lệch, robot tự cộng
                 var reply = await robot.SendOffsetAsync(offset.Dx, offset.Dy, offset.Drz, (int)id, cancellationToken);
                 string convNote = convention == PlaceOffsetConvention.Additive
                     ? ""
                     : $" Lưu ý: node đang dùng quy ước {convention}, chương trình robot phải tự áp độ bù theo quy ước đó.";
+                string where = settings.Mode == RobotSendMode.Packet
+                    ? "bằng gói tin"
+                    : $"vào điểm trung gian {settings.OffsetPoint}";
                 return reply.Accepted
                     ? new DispatchResult(true, true,
-                        $"Đã ghi độ bù {offset} vào điểm trung gian {settings.OffsetPoint} của {robotCfg.Name} (#{id}){note}.{convNote}")
+                        $"Đã gửi độ bù {offset} {where} cho {robotCfg.Name} (#{id}): {reply.Raw}{note}.{convNote}")
                     : new DispatchResult(true, false, $"Robot {robotCfg.Name} KHÔNG nhận độ bù {offset}: {reply.Error}{note}");
             }
 

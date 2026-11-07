@@ -22,6 +22,8 @@ namespace UI.ViewModels.Device
         private readonly DeviceCatalog _catalog;
         private readonly DispatcherTimer _timer;
 
+        public IDialogService Dialogs => _dialogs;
+
         /// <summary>Cấu hình thiết bị đang dùng (cùng đối tượng với các ô trên cửa sổ cấu hình).</summary>
         public DeviceCatalog Catalog => _catalog;
 

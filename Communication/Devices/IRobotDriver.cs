@@ -32,6 +32,16 @@ namespace Communication.Drivers
         /// </summary>
         Task<RobotReply> MoveRelativeAsync(double dxMm, double dyMm, double dzMm, double drzDeg, CancellationToken ct = default);
 
+        /// <summary>Vị trí hiện tại dạng số (X,Y,Z,A,B,C và cờ cấu hình).</summary>
+        Task<RobotPointReply> GetCurrentPointAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Di chuyển tới tọa độ tuyệt đối (hệ gốc robot). linear = đường thẳng (MVS), không thì nội suy khớp (MOV).
+        /// Cần quyền điều khiển + servo ON. enforceDistanceLimit = true: bị chặn nếu đích quá xa vị trí hiện tại (giới hạn di chuyển)
+        /// hoặc không đọc được vị trí hiện tại. Đặt false cho điểm đã dạy sẵn trong chương trình (người dùng đã xác nhận).
+        /// </summary>
+        Task<RobotReply> MoveToAsync(RobotPoint target, bool linear, bool enforceDistanceLimit = true, CancellationToken ct = default);
+
         /// <summary>Đặt tốc độ (override) 1–100 %.</summary>
         Task<RobotReply> SetSpeedAsync(int percent, CancellationToken ct = default);
 

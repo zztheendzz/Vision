@@ -46,6 +46,8 @@ namespace Communication.Configuration
         public const string RobotSendOffset = "Gửi độ lệch (điểm trung gian)";
         /// <summary>Robot: app tính điểm mới rồi ghi đè lên điểm đã chọn.</summary>
         public const string RobotSendOverwrite = "Ghi đè điểm đã tính";
+        /// <summary>Robot: gửi gói tin chữ (mẫu tùy chọn) chứa độ lệch qua TCP tới chương trình robot.</summary>
+        public const string RobotSendPacket = "Gửi gói tin độ lệch (TCP)";
 
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
@@ -65,6 +67,7 @@ namespace Communication.Configuration
             => new(key, label, FieldKind.Terminator, def, "Ký tự kết thúc", Hint: @"Gõ \r \n \t \0 hoặc \xHH");
 
         /// <summary>Làm ô chỉ hiện khi Chế độ = Mitsubishi (các thông số nối thật).</summary>
+        private static FieldDef WhenSend(string mode, FieldDef f) => f with { ShowWhenKey = "SendMode", ShowWhenValue = mode };
         private static FieldDef WhenMitsubishi(FieldDef f) => f with { ShowWhenKey = KeyMode, ShowWhenValue = Mitsubishi };
 
         public static readonly IReadOnlyList<DeviceTypeSchema> All = new List<DeviceTypeSchema>
@@ -163,19 +166,32 @@ namespace Communication.Configuration
                         "Bật quyền điều khiển, dừng chương trình đang chạy và reset. Cần để đọc/ghi điểm của chương trình")),
                     WhenMitsubishi(Bool("EnableOnConnect", "Bật servo khi kết nối", false, "Điều khiển",
                         "Tắt là an toàn: chương trình không tự bật servo robot. Bật ô này cũng chiếm quyền điều khiển")),
-                    Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendOverwrite }, "Độ bù"),
+                    Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendOverwrite, RobotSendPacket }, "Độ bù"),
                     Txt("TargetPoint", "Điểm cần bù", "P1", "Độ bù",
                         "Chọn từ danh sách đọc ở nút 'Đọc danh sách điểm'. Dùng cho chế độ ghi đè điểm"),
                     Txt("PointProgram", "Chương trình chứa điểm", "", "Độ bù",
                         "Tên chương trình robot có các điểm P1, P2... (đọc/ghi điểm qua chương trình này; không được đang chạy)"),
-                    Txt("OffsetPoint", "Biến điểm trung gian (toàn cục)", "P_VOFS", "Độ bù",
-                        "Chế độ độ lệch: ghi (dX,dY,0,0,0,dRz) vào biến toàn cục này bằng lệnh EXEC; chương trình robot cộng vào điểm"),
+                    WhenSend(RobotSendOffset, Txt("OffsetPoint", "Biến điểm trung gian (toàn cục)", "P_VOFS", "Độ bù",
+                        "Chế độ độ lệch: ghi (dX,dY,0,0,0,dRz) vào biến toàn cục này bằng lệnh EXEC; chương trình robot cộng vào điểm")),
+                    WhenSend(RobotSendPacket, Txt("PacketHost", "Địa chỉ nhận gói tin", "", "Gói tin",
+                        "Trống = dùng IP của robot ở trên")),
+                    WhenSend(RobotSendPacket, Int("PacketPort", "Cổng nhận gói tin", 10002, 1, 65535, "Gói tin",
+                        "Cổng TCP mà chương trình robot đang nghe (khác cổng điều khiển)")),
+                    WhenSend(RobotSendPacket, Txt("PacketTemplate", "Mẫu gói tin độ lệch", @"{dx},{dy},{drz}\r", "Gói tin",
+                        @"Ô thay thế: {id} {dx} {dy} {dz} {drz}; định dạng riêng {dx:F2}; mã thoát \r \n \t \xHH. Ví dụ X{dx},Y{dy},R{drz}\r\n")),
+                    WhenSend(RobotSendPacket, Txt("PacketReject", "Mẫu gói tin báo NG", @"NG\r", "Gói tin",
+                        "Gửi khi không thấy vật. Để trống = không gửi gì và báo lỗi")),
+                    WhenSend(RobotSendPacket, Int("PacketDecimals", "Số chữ số lẻ", 3, 0, 9, "Gói tin")),
+                    WhenSend(RobotSendPacket, Num("PacketScale", "Hệ số nhân độ lệch", "1", 0.000001, 1000000, "Gói tin",
+                        "Ví dụ 1000 để gửi micromet dạng số nguyên (kèm số lẻ = 0)")),
                     Choice("RzAxis", "Trục xoay Rz của điểm", "C", new[] { "A", "B", "C" }, "Độ bù"),
                     Int("PointCount", "Số điểm quét (P1..Pn)", 20, 1, 200, "Độ bù", "Khi đọc danh sách, thử lần lượt P1 đến Pn"),
                     WhenMitsubishi(Txt("RejectCommand", "Lệnh báo NG", "", "Độ bù",
                         "Để trống = chưa cấu hình, chương trình sẽ báo lỗi khi cần báo NG")),
                     Num("MaxOffsetMm", "Giới hạn gửi lệch (mm)", "50", 0.1, 1000, "An toàn"),
                     Num("MaxOffsetDeg", "Giới hạn gửi góc (độ)", "30", 0.1, 360, "An toàn"),
+                    Num("MaxMoveMm", "Giới hạn di chuyển tới tọa độ (mm)", "300", 1, 5000, "An toàn",
+                        "Từ chối di chuyển nếu đích cách vị trí hiện tại xa hơn số này"),
                     Addr("IoEnaBit", "IOENA", "M305"),
                     Txt("Model3d", "Model 3D", "", "Hiển thị", "Đường dẫn file model"),
                 }

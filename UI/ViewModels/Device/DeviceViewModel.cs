@@ -1,5 +1,6 @@
 ﻿using Communication.Camera;
 using Communication.Configuration;
+using Communication.Devices;
 using Communication.Drivers;
 using Communication.Transport;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -345,6 +346,120 @@ namespace UI.ViewModels.Device
         [ObservableProperty] private int _speedPercent = 10;
         [ObservableProperty] private string _positionText = "";
 
+        // Điều khiển theo tọa độ: nhập X, Y, Z, A, B, C rồi di chuyển tới đó
+        [ObservableProperty] private double _targetX;
+        [ObservableProperty] private double _targetY;
+        [ObservableProperty] private double _targetZ;
+        [ObservableProperty] private double _targetA;
+        [ObservableProperty] private double _targetB;
+        [ObservableProperty] private double _targetC;
+        [ObservableProperty] private bool _moveLinear = true;
+        private int _targetFlag1 = 7, _targetFlag2;      // cờ cấu hình lấy từ vị trí hiện tại, tay robot không đổi tư thế
+
+        /// <summary>Điền các ô tọa độ bằng vị trí hiện tại của robot (rồi sửa lại số cần đổi).</summary>
+        [RelayCommand]
+        private async Task FillCurrentPositionAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            var r = await robot.GetCurrentPointAsync();
+            if (!r.Ok) { Message = "Đọc vị trí hiện tại lỗi: " + r.Error; return; }
+
+            TargetX = r.Point.X; TargetY = r.Point.Y; TargetZ = r.Point.Z;
+            TargetA = r.Point.A; TargetB = r.Point.B; TargetC = r.Point.C;
+            _targetFlag1 = r.Point.Flag1; _targetFlag2 = r.Point.Flag2;
+            PositionText = r.Point.ToString();
+            Message = "Đã điền vị trí hiện tại, sửa số cần đổi rồi bấm Di chuyển";
+        }
+
+        [RelayCommand]
+        private async Task MoveToCoordinatesAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+
+            var target = new RobotPoint(TargetX, TargetY, TargetZ, TargetA, TargetB, TargetC, _targetFlag1, _targetFlag2);
+            string how = MoveLinear ? "đường thẳng (MVS)" : "nội suy khớp (MOV, đường đi có thể cong)";
+            if (!_owner.Dialogs.Confirm($"Robot sẽ chuyển động thật tới:\n{target}\nKiểu: {how}\n\nChắc chắn vùng làm việc trống và tay đang gần nút dừng khẩn?"))
+                return;
+
+            var speed = await robot.SetSpeedAsync(SpeedPercent);
+            if (!speed.Accepted) { Message = speed.Error ?? "Không đặt được tốc độ"; return; }
+
+            var reply = await robot.MoveToAsync(target, MoveLinear);
+            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Lệnh di chuyển thất bại";
+            if (reply.Accepted)
+            {
+                await Task.Delay(600);
+                PositionText = await robot.GetPositionTextAsync();
+            }
+        }
+
+        /// <summary>Đi tới điểm đã chọn trong danh sách điểm của chương trình (điểm đã dạy sẵn).</summary>
+        [RelayCommand]
+        private async Task GoToPointAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            string name = (SelectedPoint ?? "").Trim();
+            if (name.Length == 0) { Message = "Chọn một điểm trong danh sách trước (bấm 'Đọc danh sách điểm')"; return; }
+
+            var read = await robot.ReadPointAsync(name);
+            if (!read.Ok) { Message = $"Đọc điểm {name} lỗi: {read.Error}"; return; }
+
+            string distanceText = "";
+            var now = await robot.GetCurrentPointAsync();
+            if (now.Ok)
+            {
+                double dx = read.Point.X - now.Point.X, dy = read.Point.Y - now.Point.Y, dz = read.Point.Z - now.Point.Z;
+                distanceText = $"\nCách vị trí hiện tại: {Math.Sqrt(dx * dx + dy * dy + dz * dz):0.#} mm";
+            }
+
+            string how = MoveLinear ? "đường thẳng (MVS)" : "nội suy khớp (MOV, đường đi có thể cong)";
+            if (!_owner.Dialogs.Confirm(
+                    $"Robot sẽ chuyển động thật tới điểm {name}:\n{read.Point}{distanceText}\nKiểu: {how}\nTốc độ: {SpeedPercent}%\n\nChắc chắn vùng làm việc trống và tay đang gần nút dừng khẩn?"))
+                return;
+
+            var speed = await robot.SetSpeedAsync(SpeedPercent);
+            if (!speed.Accepted) { Message = speed.Error ?? "Không đặt được tốc độ"; return; }
+
+            // Điểm đã dạy sẵn: không áp giới hạn khoảng cách (đã xác nhận ở trên)
+            var reply = await robot.MoveToAsync(read.Point, MoveLinear, enforceDistanceLimit: false);
+            Message = reply.Accepted ? $"Đi tới {name}: {reply.Raw}" : reply.Error ?? "Lệnh di chuyển thất bại";
+            if (reply.Accepted)
+            {
+                await Task.Delay(600);
+                PositionText = await robot.GetPositionTextAsync();
+            }
+        }
+
+        /// <summary>Điền tọa độ của điểm đã chọn vào các ô "Di chuyển tới tọa độ" để xem hoặc sửa trước khi đi.</summary>
+        [RelayCommand]
+        private async Task FillFromPointAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            string name = (SelectedPoint ?? "").Trim();
+            if (name.Length == 0) { Message = "Chọn một điểm trong danh sách trước"; return; }
+
+            var read = await robot.ReadPointAsync(name);
+            if (!read.Ok) { Message = $"Đọc điểm {name} lỗi: {read.Error}"; return; }
+
+            TargetX = read.Point.X; TargetY = read.Point.Y; TargetZ = read.Point.Z;
+            TargetA = read.Point.A; TargetB = read.Point.B; TargetC = read.Point.C;
+            _targetFlag1 = read.Point.Flag1; _targetFlag2 = read.Point.Flag2;
+            Message = $"Đã điền tọa độ của {name} vào các ô, sửa nếu cần rồi bấm Di chuyển";
+        }
+
+        // Gửi thử độ lệch theo cách đã chọn (điểm trung gian hoặc gói tin) để kiểm tra phía robot nhận đúng
+        [ObservableProperty] private double _testDx = 1;
+        [ObservableProperty] private double _testDy;
+        [ObservableProperty] private double _testDrz;
+
+        [RelayCommand]
+        private async Task SendTestOffsetAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            var reply = await robot.SendOffsetAsync(TestDx, TestDy, TestDrz, 0);
+            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Gửi thử độ lệch thất bại";
+        }
+
         /// <summary>axis: "X+", "X-", "Y+", "Y-", "Z+", "Z-", "R+", "R-" (R = xoay Rz).</summary>
         [RelayCommand]
         private async Task JogAsync(string? axis)
@@ -411,6 +526,23 @@ namespace UI.ViewModels.Device
             {
                 Message = $"Đọc danh sách điểm lỗi: {ex.Message}";
             }
+        }
+
+        /// <summary>Thử đường ghi điểm an toàn: đọc điểm rồi ghi lại đúng giá trị đó (điểm không đổi). Thành công nghĩa là ghi điểm hoạt động.</summary>
+        [RelayCommand]
+        private async Task WritePointBackAsync()
+        {
+            if (!TryGetRobot(out var robot)) return;
+            string name = (SelectedPoint ?? Config.GetString("TargetPoint")).Trim();
+            if (name.Length == 0) { Message = "Chọn một điểm trước"; return; }
+
+            var read = await robot.ReadPointAsync(name);
+            if (!read.Ok) { Message = $"Đọc điểm {name} lỗi: {read.Error}"; return; }
+
+            var write = await robot.WritePointAsync(name, read.Point);
+            Message = write.Accepted
+                ? $"Ghi lại {name} thành công ({read.Point.ToMelfa()}), điểm không đổi"
+                : $"Ghi điểm {name} lỗi: {write.Error}";
         }
 
         [RelayCommand]

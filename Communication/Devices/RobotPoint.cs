@@ -12,11 +12,18 @@ namespace Communication.Devices
         /// <summary>Tính ra độ lệch (dX, dY, dRz) rồi ghi vào một biến điểm trung gian; chương trình robot tự cộng vào điểm.</summary>
         OffsetViaPoint,
         /// <summary>App tự tính ra điểm mới (điểm đã chọn + độ lệch) rồi ghi đè lên điểm đó trong robot.</summary>
-        OverwritePoint
+        OverwritePoint,
+        /// <summary>Gửi một gói tin chữ (mẫu do người dùng đặt) chứa độ lệch qua TCP tới chương trình robot.</summary>
+        Packet
     }
 
+    /// <summary>Gói tin độ lệch: đích TCP, mẫu gói tin, số lẻ, hệ số nhân.</summary>
+    public sealed record RobotPacketSettings(
+        string Host, int Port, string OffsetTemplate, string RejectTemplate, int Decimals, double Scale, int ConnectTimeoutMs = 3000);
+
     /// <summary>Cấu hình điểm của robot (lấy từ ô cấu hình thiết bị).</summary>
-    public sealed record RobotPointSettings(RobotSendMode Mode, string TargetPoint, string OffsetPoint, char RzAxis);
+    public sealed record RobotPointSettings(RobotSendMode Mode, string TargetPoint, string OffsetPoint, char RzAxis,
+                                            RobotPacketSettings? Packet = null);
 
     /// <summary>Điểm vị trí kiểu MELFA: (X,Y,Z,A,B,C)(cờ1,cờ2). X,Y,Z theo mm; A,B,C theo độ.</summary>
     public readonly record struct RobotPoint(double X, double Y, double Z, double A, double B, double C, int Flag1, int Flag2)
@@ -42,25 +49,41 @@ namespace Communication.Devices
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"X {X:0.###}, Y {Y:0.###}, Z {Z:0.###}, A {A:0.###}, B {B:0.###}, C {C:0.###} (cờ {Flag1},{Flag2})");
 
-        /// <summary>Đọc "(1,2,3,4,5,6)(7,0)" hoặc "P1=(1,2,3,4,5,6)(7,0)"; cần ít nhất 6 số.</summary>
-        public static bool TryParse(string? text, out RobotPoint point)
-        {
-            point = default;
-            if (string.IsNullOrWhiteSpace(text)) return false;
-            int open = text.IndexOf('(');
-            string body = open >= 0 ? text[open..] : text;      // bỏ phần tên "P1=" để số trong tên không lẫn vào
+        private static readonly Regex Group = new(@"\(([^)]*)\)", RegexOptions.Compiled);
 
-            var values = new List<double>();
-            foreach (Match m in Number.Matches(body))
+        private static bool Numbers(string text, List<double> values)
+        {
+            foreach (Match m in Number.Matches(text))
             {
                 if (!double.TryParse(m.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) || !double.IsFinite(v))
                     return false;
                 values.Add(v);
             }
-            if (values.Count < 6) return false;
+            return true;
+        }
 
-            point = new RobotPoint(values[0], values[1], values[2], values[3], values[4], values[5],
-                values.Count > 6 ? (int)values[6] : 0, values.Count > 7 ? (int)values[7] : 0);
+        /// <summary>
+        /// Đọc "P1=(x,y,z,a,b,c)(f1,f2)" hoặc dạng 8 trục "(x,y,z,a,b,c,l1,l2)(f1,f2)" (trục thêm L1, L2 bị bỏ qua).
+        /// Cần ít nhất 6 số tọa độ. Không có nhóm cờ thì cờ = 0.
+        /// </summary>
+        public static bool TryParse(string? text, out RobotPoint point)
+        {
+            point = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var coords = new List<double>();
+            var flags = new List<double>();
+            var groups = Group.Matches(text);
+            if (groups.Count >= 1)
+            {
+                if (!Numbers(groups[0].Groups[1].Value, coords)) return false;
+                if (groups.Count >= 2 && !Numbers(groups[1].Groups[1].Value, flags)) return false;
+            }
+            else if (!Numbers(text, coords)) return false;
+
+            if (coords.Count < 6) return false;
+            point = new RobotPoint(coords[0], coords[1], coords[2], coords[3], coords[4], coords[5],
+                flags.Count > 0 ? (int)flags[0] : 0, flags.Count > 1 ? (int)flags[1] : 0);
             return true;
         }
 

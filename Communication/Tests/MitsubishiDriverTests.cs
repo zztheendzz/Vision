@@ -1,9 +1,11 @@
 ﻿using Communication.Devices;
+using Communication.Drivers;
 using Communication.Mitsubishi;
 
 
 namespace Communication.Tests
 {
+    /// <summary>Chỉ kiểm phần logic của mình; không gọi thư viện Mitsubishi thật (cần thiết bị).</summary>
     /// <summary>Chỉ kiểm phần logic của mình; không gọi thư viện Mitsubishi thật (cần thiết bị).</summary>
     //public class MitsubishiDriverTests
     //{
@@ -19,11 +21,55 @@ namespace Communication.Tests
     //    }
 
     //    [Fact]
+    //    public void OffsetPacketBuildsFromTemplate()
+    //    {
+    //        Assert.Equal("1.250,-0.800,0.500\r", OffsetPacket.Build("{dx},{dy},{drz}\\r", 1.25, -0.8, 0, 0.5, 7));
+    //        Assert.Equal("X1.25,Y-0.80,#000007\r\n", OffsetPacket.Build("X{dx:F2},Y{dy:F2},#{id:D6}\\r\\n", 1.25, -0.8, 0, 0, 7));
+    //        Assert.Equal("1250,-800", OffsetPacket.Build("{dx},{dy}", 1.25, -0.8, 0, 0, 1, decimals: 0, scale: 1000));
+    //        Assert.NotNull(OffsetPacket.Validate("{dx},{abc}"));
+    //        Assert.Throws<ArgumentException>(() => OffsetPacket.Build("{xyz}", 0, 0, 0, 0, 1));
+    //        Assert.Equal("a\\r\\n", OffsetPacket.Visible("a\r\n"));
+    //    }
+
+    //    [Fact]
+    //    public async Task SimulatedRobotSendsPacket()
+    //    {
+    //        var packet = new RobotPacketSettings("127.0.0.1", 10002, "X{dx},Y{dy}\\r", "NG\\r", 2, 1);
+    //        using var r = new Communication.Simulated.SimulatedRobot(
+    //            new RobotPointSettings(RobotSendMode.Packet, "P1", "P_VOFS", 'C', packet));
+    //        await r.ConnectAsync();
+    //        var reply = await r.SendOffsetAsync(1.5, -2, 0, 3);
+    //        Assert.True(reply.Accepted);
+    //        Assert.Contains("X1.50,Y-2.00\\r", reply.Raw);
+    //        Assert.Contains("NG", (await r.SendRejectAsync(3)).Raw);
+    //    }
+
+    //    [Fact]
+    //    public async Task SimulatedRobotMovesToCoordinatesWithSafetyChecks()
+    //    {
+    //        using var r = new Communication.Simulated.SimulatedRobot();
+    //        await r.ConnectAsync();
+    //        var start = (await r.GetCurrentPointAsync()).Point;
+
+    //        Assert.False((await r.MoveToAsync(start with { X = start.X + 10 }, true)).Accepted);   // chưa chiếm quyền
+    //        await r.TakeControlAsync(false);
+    //        Assert.False((await r.MoveToAsync(start with { X = start.X + 10 }, true)).Accepted);   // chưa bật servo
+    //        await r.SetServoAsync(true);
+
+    //        Assert.True((await r.MoveToAsync(start with { X = start.X + 10, C = 45 }, true)).Accepted);
+    //        Assert.Equal(start.X + 10, (await r.GetCurrentPointAsync()).Point.X);
+    //        Assert.False((await r.MoveToAsync(start with { X = start.X + 1000 }, false)).Accepted); // quá xa
+    //        Assert.True((await r.MoveToAsync(start with { X = start.X + 1000 }, false, enforceDistanceLimit: false)).Accepted);   // điểm đã dạy
+    //    }
+
+    //    [Fact]
     //    public void PointParsingAndFormatting()
     //    {
     //        Assert.True(RobotPoint.TryParse("P1=(300.5,-20,50,180,0,-90.25)(7,1)", out var p));
     //        Assert.Equal(new RobotPoint(300.5, -20, 50, 180, 0, -90.25, 7, 1), p);
     //        Assert.Equal("(300.5,-20,50,180,0,-90.25)(7,1)", p.ToMelfa());
+    //        Assert.True(RobotPoint.TryParse("P1=(298.860,496.760,517.340,180.000,-26.050,-121.030,0.000,0.000)(7,0)", out var q));
+    //        Assert.Equal(new RobotPoint(298.86, 496.76, 517.34, 180, -26.05, -121.03, 7, 0), q);
     //        Assert.False(RobotPoint.TryParse("(1,2,3)", out _));
     //        Assert.False(RobotPoint.TryParse("", out _));
     //        Assert.True(RobotPoint.IsValidName("P12"));
