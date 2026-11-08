@@ -1,0 +1,299 @@
+﻿using Communication.Devices;
+using Communication.Drivers;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using Vision.Calibration;
+using Vision.Geometry;
+
+namespace UI.Services
+{
+    /// <summary>
+    /// Thông số một lần hiệu chuẩn tự động.
+    /// Robot cầm mốc (hoặc vật) và đi qua lưới điểm quanh Center; mỗi điểm dừng hẳn, chụp, đo pixel, đọc vị trí robot.
+    /// </summary>
+    public sealed record AutoCalibrationPlan(
+        RobotPoint Center,                       // điểm tâm: mốc nằm giữa vùng nhìn của camera, nét tốt
+        int CountX,                              // số điểm theo X robot (2..7)
+        int CountY,                              // số điểm theo Y robot (2..7)
+        double StepMm,                           // bước giữa hai điểm lưới (mm)
+        IReadOnlyList<double> RotationsDeg,      // các góc xoay thêm tại tâm để kiểm tra dấu góc (vd -10, 10). Rỗng = bỏ qua
+        int SpeedPercent,                        // tốc độ robot khi hiệu chuẩn (1..100)
+        int SettleMs,                            // chờ sau khi tới nơi cho hết rung
+        double MaxRmsMm,                         // sai số RMS lớn nhất chấp nhận được
+        int MinValidPoints,                      // số điểm hợp lệ tối thiểu
+        char RzAxis);                            // trục xoay của robot ứng với góc Rz (thường 'C')
+
+    /// <summary>Kết quả hiệu chuẩn tự động. Data khác null khi tính được ma trận (kể cả khi bị từ chối vì sai số lớn).</summary>
+    public sealed record AutoCalibrationResult(
+        bool Success, string Message, IReadOnlyList<CalibrationPoint> Points,
+        CalibrationData? Data, IReadOnlyList<string> Warnings);
+
+    /// <summary>
+    /// Hiệu chuẩn camera - robot TỰ ĐỘNG (dùng cho cả hai trường hợp: robot cầm vật đưa tới camera cố định,
+    /// hoặc robot cầm mốc quét qua vùng nhìn của camera đặt trên bàn).
+    ///
+    /// Lớp này KHÔNG biết camera hay giao diện: việc "chụp và đo" được truyền vào qua hàm measure
+    /// (trả Pose2D của mốc trong ảnh, hoặc null nếu không thấy).
+    ///
+    /// An toàn: kiểm tra trước khi đi (robot có quyền điều khiển, vùng quét nhỏ), đi chậm, mỗi bước hủy được,
+    /// cuối cùng về lại tâm. Không ghi file; người gọi tự lưu Data nếu Success.
+    /// </summary>
+    public static class AutoCalibrator
+    {
+        public const double MaxHalfSpanMm = 60;          // nửa bề rộng lưới tối đa tính từ tâm
+        public const double MaxRotationDeg = 30;
+
+        private const double ArriveToleranceMm = 0.05;
+        private const double ArriveToleranceDeg = 0.05;
+        private static readonly TimeSpan ArriveTimeout = TimeSpan.FromSeconds(20);
+        private const double RotationToleranceDeg = 1.0;
+
+        /// <summary>Kiểm tra thông số. Trả về lỗi hoặc null nếu hợp lệ.</summary>
+        public static string? Validate(AutoCalibrationPlan plan)
+        {
+            if (plan.CountX < 2 || plan.CountX > 7 || plan.CountY < 2 || plan.CountY > 7)
+                return "Số điểm mỗi hướng phải từ 2 đến 7.";
+            if (plan.StepMm < 0.5 || plan.StepMm > 50)
+                return "Bước lưới phải từ 0.5 đến 50 mm.";
+            double halfX = (plan.CountX - 1) * plan.StepMm / 2;
+            double halfY = (plan.CountY - 1) * plan.StepMm / 2;
+            if (halfX > MaxHalfSpanMm || halfY > MaxHalfSpanMm)
+                return $"Vùng quét quá rộng (nửa bề rộng tối đa {MaxHalfSpanMm} mm). Giảm số điểm hoặc bước.";
+            foreach (double a in plan.RotationsDeg)
+                if (!double.IsFinite(a) || Math.Abs(a) > MaxRotationDeg)
+                    return $"Góc xoay kiểm tra phải trong ±{MaxRotationDeg}°.";
+            if (plan.SpeedPercent < 1 || plan.SpeedPercent > 100) return "Tốc độ phải từ 1 đến 100 %.";
+            if (plan.SettleMs < 0 || plan.SettleMs > 10_000) return "Thời gian chờ ổn định phải từ 0 đến 10000 ms.";
+            if (plan.MinValidPoints < 3) return "Số điểm hợp lệ tối thiểu phải từ 3 trở lên.";
+            if (plan.MinValidPoints > plan.CountX * plan.CountY)
+                return "Số điểm hợp lệ tối thiểu lớn hơn tổng số điểm lưới.";
+            if (!double.IsFinite(plan.MaxRmsMm) || plan.MaxRmsMm <= 0) return "Sai số RMS tối đa phải lớn hơn 0.";
+            return null;
+        }
+
+        /// <summary>Các điểm lưới, đi theo hình rắn (zigzag) để robot không phải chạy ngược về đầu hàng.</summary>
+        public static IReadOnlyList<RobotPoint> BuildGrid(AutoCalibrationPlan plan)
+        {
+            var list = new List<RobotPoint>();
+            for (int j = 0; j < plan.CountY; j++)
+            {
+                double dy = (j - (plan.CountY - 1) / 2.0) * plan.StepMm;
+                for (int k = 0; k < plan.CountX; k++)
+                {
+                    int i = j % 2 == 0 ? k : plan.CountX - 1 - k;
+                    double dx = (i - (plan.CountX - 1) / 2.0) * plan.StepMm;
+                    list.Add(plan.Center with { X = plan.Center.X + dx, Y = plan.Center.Y + dy });
+                }
+            }
+            return list;
+        }
+
+        public static async Task<AutoCalibrationResult> RunAsync(
+            IRobotDriver robot,
+            Func<CancellationToken, Task<Pose2D?>> measure,
+            AutoCalibrationPlan plan,
+            IProgress<string> progress,
+            CancellationToken ct)
+        {
+            var points = new List<CalibrationPoint>();
+            var warnings = new List<string>();
+
+            string? invalid = Validate(plan);
+            if (invalid != null) return Fail(invalid, points, warnings);
+            if (!robot.IsConnected) return Fail("Robot chưa kết nối.", points, warnings);
+            if (!robot.HasControl)
+                return Fail("Chưa chiếm quyền điều khiển robot (tab Điều khiển của robot → Chiếm quyền).", points, warnings);
+
+            var grid = BuildGrid(plan);
+            progress.Report($"Hiệu chuẩn tự động: {grid.Count} điểm lưới, bước {plan.StepMm} mm, tốc độ {plan.SpeedPercent} %.");
+
+            var speed = await robot.SetSpeedAsync(plan.SpeedPercent, ct);
+            if (!speed.Accepted) return Fail($"Không đặt được tốc độ: {speed.Error}", points, warnings);
+
+            try
+            {
+                // ---------- Pha 1: lưới tịnh tiến ----------
+                int skipped = 0;
+                for (int n = 0; n < grid.Count; n++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var target = grid[n];
+                    progress.Report($"[{n + 1}/{grid.Count}] Đi tới X {target.X:F2}, Y {target.Y:F2}...");
+
+                    var arrived = await GoAndSettleAsync(robot, target, plan, ct);
+                    if (arrived.Error != null) return Fail(arrived.Error, points, warnings);
+
+                    var pose = await measure(ct);
+                    if (pose is not { } p || !p.IsFinite)
+                    {
+                        skipped++;
+                        progress.Report($"    Không thấy mốc ở điểm này: bỏ qua.");
+                        continue;
+                    }
+
+                    // Dùng vị trí robot ĐỌC LẠI sau khi dừng, không dùng vị trí lệnh
+                    var actual = arrived.Actual;
+                    points.Add(new CalibrationPoint(p.Column, p.Row, actual.X, actual.Y));
+                    progress.Report($"    pixel ({p.Column:F2}, {p.Row:F2}) ↔ robot ({actual.X:F3}, {actual.Y:F3})");
+                }
+
+                if (skipped > 0) warnings.Add($"{skipped} điểm không đo được và đã bị bỏ qua.");
+
+                if (points.Count < plan.MinValidPoints)
+                    return Fail($"Chỉ đo được {points.Count} điểm (cần ít nhất {plan.MinValidPoints}). " +
+                                "Kiểm tra ánh sáng, nét, và vùng quét có nằm trong vùng nhìn của camera không.", points, warnings);
+
+                // ---------- Tính ma trận ----------
+                CalibrationData data;
+                Affine2D affine;
+                try
+                {
+                    data = CalibrationStore.Create(points);
+                    affine = data.ToAffine();
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+                {
+                    return Fail("Không tính được ma trận: " + ex.Message, points, warnings);
+                }
+
+                progress.Report($"Ma trận: {points.Count} điểm, RMS {data.RmsMm:F3} mm, lớn nhất {data.MaxErrorMm:F3} mm, " +
+                                $"{affine.MillimetersPerPixel:F4} mm/pixel.");
+
+                // ---------- Pha 2: kiểm tra dấu góc ----------
+                if (plan.RotationsDeg.Count > 0)
+                {
+                    var rotWarn = await CheckRotationAsync(robot, measure, plan, affine, progress, ct);
+                    warnings.AddRange(rotWarn);
+                }
+
+                if (data.RmsMm > plan.MaxRmsMm)
+                    return new AutoCalibrationResult(false,
+                        $"Sai số RMS {data.RmsMm:F3} mm vượt giới hạn {plan.MaxRmsMm:F3} mm: KHÔNG lưu. " +
+                        "Thường do robot chưa dừng hẳn lúc chụp, mốc đo không ổn định, hoặc TCP/độ cao Z sai.",
+                        points, data, warnings);
+
+                return new AutoCalibrationResult(true,
+                    $"Xong: {points.Count} điểm, RMS {data.RmsMm:F3} mm, lớn nhất {data.MaxErrorMm:F3} mm.",
+                    points, data, warnings);
+            }
+            catch (OperationCanceledException)
+            {
+                return Fail("Đã dừng theo yêu cầu. Robot dừng ở vị trí hiện tại, kiểm tra trước khi chạy tiếp.", points, warnings);
+            }
+            finally
+            {
+                // Về lại tâm (cố gắng, không ném lỗi). Không dùng token đã hủy để vẫn về được tâm.
+                try
+                {
+                    using var cts = new CancellationTokenSource(ArriveTimeout);
+                    var back = await GoAndSettleAsync(robot, plan.Center, plan with { SettleMs = 0 }, cts.Token);
+                    progress.Report(back.Error == null ? "Đã về lại điểm tâm." : "Chưa về được điểm tâm: " + back.Error);
+                }
+                catch (Exception ex)
+                {
+                    progress.Report("Chưa về được điểm tâm: " + ex.Message);
+                }
+            }
+        }
+
+        // ============================================================
+        // Kiểm tra dấu góc: xoay C quanh tâm, so góc đo từ ảnh với góc robot đã xoay
+        // ============================================================
+
+        private static async Task<List<string>> CheckRotationAsync(
+            IRobotDriver robot, Func<CancellationToken, Task<Pose2D?>> measure, AutoCalibrationPlan plan,
+            Affine2D affine, IProgress<string> progress, CancellationToken ct)
+        {
+            var warnings = new List<string>();
+
+            var centerArrived = await GoAndSettleAsync(robot, plan.Center, plan, ct);
+            if (centerArrived.Error != null) { warnings.Add("Kiểm tra góc: " + centerArrived.Error); return warnings; }
+            var basePose = await measure(ct);
+            if (basePose is not { } b || !b.IsFinite)
+            {
+                warnings.Add("Kiểm tra góc: không đo được mốc ở góc 0.");
+                return warnings;
+            }
+            double baseRz = affine.TransformAngle(b.AngleDeg);
+
+            double worst = 0;
+            foreach (double a in plan.RotationsDeg.Where(x => Math.Abs(x) > 1e-6))
+            {
+                ct.ThrowIfCancellationRequested();
+                var target = plan.Center.WithAxis(plan.RzAxis, plan.Center.GetAxis(plan.RzAxis) + a);
+                progress.Report($"Kiểm tra góc: xoay {a:+0.##;-0.##}°...");
+
+                var arrived = await GoAndSettleAsync(robot, target, plan, ct);
+                if (arrived.Error != null) { warnings.Add("Kiểm tra góc: " + arrived.Error); break; }
+
+                var pose = await measure(ct);
+                if (pose is not { } p || !p.IsFinite)
+                {
+                    warnings.Add($"Kiểm tra góc: không đo được mốc ở {a:+0.##;-0.##}°.");
+                    continue;
+                }
+
+                double measured = Pose2D.NormalizeAngle(affine.TransformAngle(p.AngleDeg) - baseRz);
+                double expected = Pose2D.NormalizeAngle(arrived.Actual.GetAxis(plan.RzAxis) - centerArrived.Actual.GetAxis(plan.RzAxis));
+                double err = Math.Abs(Pose2D.NormalizeAngle(measured - expected));
+                worst = Math.Max(worst, err);
+                progress.Report($"    robot xoay {expected:+0.##;-0.##}°, ảnh đo {measured:+0.##;-0.##}°, lệch {err:F2}°");
+
+                if (err > RotationToleranceDeg && Math.Abs(Pose2D.NormalizeAngle(measured + expected)) < RotationToleranceDeg * 2)
+                    warnings.Add($"Dấu góc có vẻ NGƯỢC: robot xoay {expected:+0.##;-0.##}° nhưng ảnh đo {measured:+0.##;-0.##}°. " +
+                                 "Dùng 'Đảo chiều góc' khi gửi tọa độ, hoặc kiểm tra quy ước trục xoay.");
+            }
+
+            if (worst > RotationToleranceDeg && !warnings.Any(w => w.Contains("NGƯỢC")))
+                warnings.Add($"Góc đo từ ảnh lệch tới {worst:F2}° so với góc robot xoay (ngưỡng {RotationToleranceDeg}°). " +
+                             "Kiểm tra mốc có đối xứng không (mốc tròn không có hướng sẽ đo góc không ổn định).");
+            return warnings;
+        }
+
+        // ============================================================
+        // Di chuyển và chờ tới nơi
+        // ============================================================
+
+        private sealed record Arrival(RobotPoint Actual, string? Error);
+
+        /// <summary>Đi thẳng tới đích, chờ vị trí ổn định tại đích, chờ thêm SettleMs, rồi đọc vị trí thật.</summary>
+        private static async Task<Arrival> GoAndSettleAsync(
+            IRobotDriver robot, RobotPoint target, AutoCalibrationPlan plan, CancellationToken ct)
+        {
+            var move = await robot.MoveToAsync(target, linear: true, enforceDistanceLimit: true, ct);
+            if (!move.Accepted) return new Arrival(default, $"Robot không nhận lệnh di chuyển: {move.Error}");
+
+            var deadline = DateTime.UtcNow + ArriveTimeout;
+            int stable = 0;
+            RobotPoint last = default;
+
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (DateTime.UtcNow > deadline)
+                    return new Arrival(default, "Quá thời gian chờ robot tới nơi (kiểm tra servo, lỗi, tốc độ).");
+
+                var now = await robot.GetCurrentPointAsync(ct);
+                if (!now.Ok) return new Arrival(default, $"Không đọc được vị trí robot: {now.Error}");
+                last = now.Point;
+
+                bool near = Math.Abs(last.X - target.X) <= ArriveToleranceMm
+                         && Math.Abs(last.Y - target.Y) <= ArriveToleranceMm
+                         && Math.Abs(Pose2D.NormalizeAngle(last.GetAxis(plan.RzAxis) - target.GetAxis(plan.RzAxis))) <= ArriveToleranceDeg;
+
+                stable = near ? stable + 1 : 0;
+                if (stable >= 2) break;                  // hai lần đọc liên tiếp đều ở đích
+                await Task.Delay(150, ct);
+            }
+
+            if (plan.SettleMs > 0) await Task.Delay(plan.SettleMs, ct);
+
+            var final = await robot.GetCurrentPointAsync(ct);
+            return final.Ok ? new Arrival(final.Point, null) : new Arrival(last, null);
+        }
+
+        private static AutoCalibrationResult Fail(string message, IReadOnlyList<CalibrationPoint> points, IReadOnlyList<string> warnings)
+            => new(false, message, points, null, warnings);
+    }
+}

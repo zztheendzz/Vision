@@ -1,0 +1,192 @@
+﻿<Window x:Class="UI.Views.PlcMapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UI.Views"
+        mc:Ignorable="d"
+        Title="PlcMapWindow" Height="450" Width="800">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Kiểu bảng tối cho DataGrid (theme chung chưa có) -->
+        <Style TargetType="{x:Type DataGrid}">
+            <Setter Property="Background" Value="{StaticResource VsPanelBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="RowBackground" Value="{StaticResource VsPanelBrush}" />
+            <Setter Property="AlternatingRowBackground" Value="{StaticResource VsWindowBrush}" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="CanUserSortColumns" Value="False" />
+            <Setter Property="CanUserReorderColumns" Value="False" />
+            <Setter Property="SelectionUnit" Value="Cell" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+        </Style>
+        <Style TargetType="{x:Type DataGridColumnHeader}">
+            <Setter Property="Background" Value="{StaticResource VsPanelHeaderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Padding" Value="6,4" />
+        </Style>
+        <Style TargetType="{x:Type DataGridCell}">
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,2" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource VsSelectedBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- ================= THANH DƯỚI ================= -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource VsPanelHeaderBrush}"
+                BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Đóng" Width="90" Style="{StaticResource OutlineButton}"
+                        Click="Close_Click" />
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource VsMutedBrush}" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Border>
+
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============ THANH CÔNG CỤ ============ -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Mở..." Style="{StaticResource OutlineButton}" Command="{Binding OpenCommand}" />
+                    <Button Content="Lưu" Width="80" Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}" />
+                    <Button Content="Lưu thành..." Style="{StaticResource OutlineButton}" Command="{Binding SaveAsCommand}" />
+                    <Button Content="Đặt lại mặc định" Style="{StaticResource OutlineButton}" Command="{Binding ResetToDefaultsCommand}" />
+                    <Button Content="Kiểm tra" Style="{StaticResource OutlineButton}" Command="{Binding RefreshIssuesCommand}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Tên máy:" VerticalAlignment="Center" Margin="0,0,6,0"
+                               Foreground="{StaticResource VsMutedBrush}" />
+                    <TextBox Width="220" Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="{Binding FilePath}" VerticalAlignment="Center" Margin="12,0,0,0"
+                               Foreground="{StaticResource VsMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="360" />
+                </StackPanel>
+            </DockPanel>
+
+            <!-- ============ MỖI NHÓM MỘT TAB ============ -->
+            <TabControl Grid.Row="1" ItemsSource="{Binding Groups}">
+                <TabControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Title}" />
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="10">
+
+                                <!-- Tín hiệu đơn -->
+                                <DataGrid ItemsSource="{Binding Items}"
+                                          Visibility="{Binding HasItems, Converter={StaticResource BoolToVis}}"
+                                          CellEditEnding="Grid_CellEditEnding">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Khóa (code dùng)" Binding="{Binding Key}" IsReadOnly="True" Width="140" />
+                                        <DataGridTextColumn Header="Chức năng" Binding="{Binding Title}" IsReadOnly="True" Width="190" />
+                                        <DataGridTextColumn Header="Địa chỉ" Binding="{Binding Address, UpdateSourceTrigger=LostFocus}" Width="90" />
+                                        <DataGridComboBoxColumn Header="Kiểu" SelectedItemBinding="{Binding Kind}"
+                                                                ItemsSource="{x:Static local:MapEnums.Kinds}" Width="80" />
+                                        <DataGridComboBoxColumn Header="Cách kích" SelectedItemBinding="{Binding Mode}"
+                                                                ItemsSource="{x:Static local:MapEnums.Modes}" Width="80" />
+                                        <DataGridTextColumn Header="Hệ số" Binding="{Binding Scale}" Width="70" />
+                                        <DataGridCheckBoxColumn Header="Có dấu" Binding="{Binding Signed}" Width="60" />
+                                        <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note}" Width="*" MinWidth="200" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <!-- Các bảng theo chỉ số -->
+                                <ItemsControl ItemsSource="{Binding Tables}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,14,0,0">
+                                                <Border Style="{StaticResource PanelTitleBar}">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                                </Border>
+                                                <TextBlock Text="{Binding Note}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                                           Foreground="{StaticResource VsMutedBrush}"
+                                                           Visibility="{Binding HasNote, Converter={StaticResource BoolToVis}}" />
+
+                                                <WrapPanel Margin="0,6,0,6">
+                                                    <TextBlock Text="Thanh ghi chọn chỉ số:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                    <TextBox Width="80" Text="{Binding IndexAddress, UpdateSourceTrigger=LostFocus}" />
+                                                    <TextBlock Text="Tạo dãy cho cột:" VerticalAlignment="Center" Margin="18,0,6,0" />
+                                                    <ComboBox Width="150" ItemsSource="{Binding ColumnTitles}"
+                                                              SelectedIndex="{Binding FillColumnIndex}" />
+                                                    <TextBlock Text="từ địa chỉ" VerticalAlignment="Center" Margin="8,0,6,0" />
+                                                    <TextBox Width="80" Text="{Binding FillBase, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <TextBlock Text="bước" VerticalAlignment="Center" Margin="8,0,6,0" />
+                                                    <TextBox Width="40" Text="{Binding FillStep, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <Button Content="Tạo dãy" Style="{StaticResource OutlineButton}"
+                                                            Command="{Binding FillCommand}" />
+                                                </WrapPanel>
+
+                                                <DataGrid ItemsSource="{Binding Rows}"
+                                                          Loaded="TableGrid_Loaded"
+                                                          CellEditEnding="Grid_CellEditEnding" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
+
+            <!-- ============ KIỂM TRA ĐỊA CHỈ ============ -->
+            <Expander Grid.Row="2" Header="Kiểm tra địa chỉ (lỗi, trùng, chồng lên nhau)" IsExpanded="True" Margin="0,8,0,0">
+                <ListBox ItemsSource="{Binding IssueLines}" MaxHeight="130" />
+            </Expander>
+
+            <!-- ============ ĐỌC / GHI THỬ ============ -->
+            <StackPanel Grid.Row="3" Margin="0,8,0,0">
+                <WrapPanel>
+                    <TextBlock Text="Thử trên PLC đang nối:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Width="90" Text="{Binding TestAddress, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}" Command="{Binding TestReadBitCommand}" />
+                    <Button Content="Đọc thanh ghi" Style="{StaticResource OutlineButton}" Command="{Binding TestReadWordCommand}" />
+                    <Button Content="Ghi bit = 1" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOnCommand}" />
+                    <Button Content="Ghi bit = 0" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOffCommand}" />
+                    <TextBlock Text="{Binding TestResult}" VerticalAlignment="Center" Margin="12,0,0,0"
+                           Foreground="{StaticResource VsMutedBrush}" />
+                </WrapPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Text="Thử gửi độ bù qua PLC (ghi thanh ghi Calib):" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="dX" VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <TextBox Width="60" Text="{Binding TestDx, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="dY" VerticalAlignment="Center" Margin="8,0,4,0" />
+                    <TextBox Width="60" Text="{Binding TestDy, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="dRz" VerticalAlignment="Center" Margin="8,0,4,0" />
+                    <TextBox Width="60" Text="{Binding TestDr, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="Ghi vào PLC" Style="{StaticResource OutlineButton}" Command="{Binding TestSendOffsetCommand}" />
+                </WrapPanel>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+
+
+</Window>

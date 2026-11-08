@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Communication/Communication.csproj" Id="44b279c6-c903-405e-b0b8-37a5157ae6eb" />
+  <Project Path="MxBridge/MxBridge.csproj" Id="3d8fd233-e948-4e92-b403-fb0964e8043a" />
+  <Project Path="UI/UI.csproj" Id="422feea9-914a-47ac-9787-edd20631809c" />
+  <Project Path="Vision/Vision.csproj" />
+</Solution>

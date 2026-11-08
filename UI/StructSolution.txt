@@ -1,0 +1,149 @@
+Solution
+│
+├─ Vision/                                      XỬ LÝ ẢNH (Halcon). Không biết thiết bị
+│  │
+│  ├─ Core/                                     kiểu dữ liệu nền
+│  │  ├─ ToolKind.cs ............ enum ToolKind            Source / Pure / Stateful / Action
+│  │  ├─ RunMode.cs ............. enum RunMode             DryRun / Live / Teach
+│  │  ├─ ResultStatus.cs ........ enum ResultStatus        Ok / NoResult / ConfigError / SystemError
+│  │  ├─ ToolContext.cs ......... class ToolContext        Mode, CancellationToken, Logger, NeedDisplay
+│  │  ├─ PortDef.cs ............. record PortDef           khai báo cổng vào/ra của tool
+│  │  ├─ ParamDef.cs ............ record ParamDef          khai báo tham số (Coerce, Min/Max)
+│  │  ├─ VisionToolInput.cs ..... class VisionToolInput    dữ liệu vào tool (mượn, không sở hữu)
+│  │  └─ VisionToolResult.cs .... class VisionToolResult   kết quả; chủ sở hữu và Dispose đối tượng Halcon
+│  │
+│  ├─ Graph/                                    đồ thị node
+│  │  ├─ Port.cs ................ abstract Port; OutputPort; InputPort
+│  │  ├─ Connection.cs .......... class Connection         dây nối giữa hai cổng
+│  │  ├─ VisionNode.cs .......... class VisionNode         một node = một tool + tham số
+│  │  └─ VisionGraph.cs ......... class VisionGraph        DAG, kiểm tra chu trình, thứ tự chạy
+│  │
+│  ├─ Execution/                                chạy đồ thị
+│  │  ├─ GraphExecutor.cs ....... enum NodeStatus; class NodeRun; class GraphRunResult;
+│  │  │                           class GraphExecutor      chạy từng node, bọc lỗi bất ngờ
+│  │  └─ RunOptions.cs .......... class RunOptions         Mode, NeedDisplay, Seed, ghi đè tham số
+│  │
+│  ├─ Runtime/                                  chạy theo chu kỳ máy
+│  │  ├─ Runner.cs .............. class Runner             chạy một chu kỳ, trả về CycleRecord
+│  │  ├─ CycleRecord.cs ......... record CycleRecord       kết quả một chu kỳ
+│  │  └─ RunVerdict.cs .......... enum RunVerdict          Ok / NG / Error
+│  │
+│  ├─ Serialization/                            lưu / mở recipe
+│  │  ├─ GraphSerializer.cs ..... static GraphSerializer   lưu atomic, nạp "đủ hoặc không"
+│  │  ├─ RecipeDto.cs ........... RecipeDto; NodeDto; ConnectionDto; EndpointDto
+│  │  ├─ LoadedRecipe.cs ........ record LoadedRecipe
+│  │  └─ RecipeException.cs ..... class RecipeException
+│  │
+│  ├─ Geometry/                                 hình học
+│  │  ├─ Pose2D.cs .............. record struct Pose2D (Row, Column, AngleDeg);
+│  │  │                           RobotPose; RobotOffset
+│  │  └─ Rigid2D.cs ............. record struct Rigid2D    SE(2): nhân, nghịch đảo
+│  │
+│  ├─ Calibration/                              pixel → mm robot
+│  │  ├─ Affine2D.cs ............ record struct CalibrationPoint; class Affine2D
+│  │  │                           (Fit bình phương tối thiểu, Apply, TransformAngle)
+│  │  ├─ CalibrationStore.cs .... class CalibrationData; static CalibrationStore
+│  │  │                           (Load/Save/Create/ReadCsv)
+│  │  └─ CalibrationCache.cs .... class CalibrationCache   nạp lại khi file đổi
+│  │
+│  ├─ Services/
+│  │  └─ IVisionLogger.cs ....... interface IVisionLogger; NullVisionLogger
+│  │
+│  └─ Tools/
+│     ├─ Abstractions/
+│     │  ├─ IVisionTool.cs ...... interface IVisionTool
+│     │  └─ IRoiEditable.cs ..... interface IRoiEditable; static RoiParameters
+│     ├─ Bases/
+│     │  ├─ VisionToolBase.cs ... abstract VisionToolBase
+│     │  ├─ SourceToolBase.cs ... abstract (không có ảnh vào)
+│     │  ├─ PureToolBase.cs ..... abstract (không trạng thái)
+│     │  ├─ StatefulToolBase.cs . abstract (giữ model/cache, nạp lazy)
+│     │  └─ ActionToolBase.cs ... abstract (có tác động ra ngoài)
+│     ├─ Registry/
+│     │  ├─ VisionToolAttribute.cs  [VisionTool(id, tên, Group, Description)]
+│     │  ├─ ToolDescriptor.cs ... record ToolDescriptor
+│     │  └─ ToolRegistry.cs ..... static ToolRegistry (Scan, Get, Create, Errors)
+│     ├─ Source/      LoadImageTool
+│     ├─ Preprocess/  ThresholdTool
+│     ├─ Locate/      BlobTool; SelectRegionTool (+ enum RegionFeature);
+│     │               SelectByRoiTool (+ enum RoiShape); FindShapeTool
+│     ├─ Roi/         static RoiRegionFactory
+│     └─ Calibrate/   PixelToRobotTool;
+│                     PickCompensationTool (+ enum OffsetConvention);
+│                     PlaceCompensationTool (+ enum PlaceOffsetConvention)
+│
+├─ Communication/                               LÕI GIAO TIẾP. Không chứa thư viện của hãng nào
+│  │
+│  ├─ Configuration/                            cấu hình thiết bị (dữ liệu + luật, không có socket)
+│  │  ├─ DeviceEnums.cs ......... enum DeviceType          Camera/Scanner/PLC/Robot/Fixture/PC
+│  │  ├─ FieldDef.cs ............ record ShowCondition; enum FieldKind; record FieldDef
+│  │  │                           (kiểu, mặc định, giới hạn, Validate, IsVisible)
+│  │  ├─ DeviceSchemas.cs ....... class DeviceTypeSchema; static DeviceSchemas
+│  │  │                           (thuộc tính 6 loại; hãng và kiểu truyền thông lấy từ registry)
+│  │  ├─ DeviceConfig.cs ........ class DeviceConfig       Id, Type, Name, Enabled, SourcePlcId, Values
+│  │  ├─ DeviceCatalog.cs ....... class DeviceCatalog      NextName, AddDevice, CheckName, Remove,
+│  │  │                           GetTransportSettings, UsesSharedTransport, Validate, Repair
+│  │  ├─ DeviceConfigStore.cs ... class DeviceConfigStore  đọc/ghi devices.json (atomic, có phiên bản)
+│  │  └─ Escapes.cs ............. static Escapes           \r \n \xHH ↔ byte
+│  │
+│  ├─ Drivers/                                  hợp đồng + đăng ký
+│  │  ├─ IDeviceLink.cs ......... interface IDeviceLink    Connect / Disconnect / IsConnected
+│  │  ├─ IRobotDriver.cs ........ record RobotReply; interface IRobotDriver
+│  │  ├─ IPlcDriver.cs .......... interface IPlcDriver     Read/Write bit và word
+│  │  ├─ Descriptors.cs ......... record DriverContext; abstract DescriptorBase;
+│  │  │                           TransportDescriptor; abstract VendorDescriptorBase;
+│  │  │                           RobotDriverDescriptor; PlcDriverDescriptor
+│  │  ├─ DriverRegistry.cs ...... class DriverRegistry     đăng ký, Default có sẵn TCP/Serial/giả lập
+│  │  └─ DeviceFactory.cs ....... static DeviceFactory     CreateLink / CreateRobot / CreatePlc /
+│  │                              CreateTransport / CanConnect / Describe
+│  │
+│  ├─ Transport/                                đường truyền thô
+│  │  ├─ ITransport.cs .......... interface ITransport : IDeviceLink (Send, Request)
+│  │  ├─ StreamTransport.cs ..... abstract StreamTransport (khung gói, hỏi-đáp, khóa)
+│  │  ├─ TcpTransport.cs ........ class TcpTransport
+│  │  ├─ SerialTransport.cs ..... class SerialTransport
+│  │  ├─ TransportSettings.cs ... record TransportSettings
+│  │  └─ TransportDescriptors.cs  static TransportDescriptors (Tcp, Serial)
+│  │
+│  ├─ Robots/  SimulatedRobotDriver.cs ... class SimulatedRobotDriver
+│  └─ Plc/     SimulatedPlcDriver.cs ..... class SimulatedPlcDriver
+│
+├─ Communication.Mitsubishi/                    1 HÃNG = 1 PROJECT (→ Communication)
+│  ├─ MitsubishiDrivers.cs ...... static MitsubishiDrivers   Register(registry)
+│  └─ MitsubishiRobotDriver.cs .. class MitsubishiRobotDriver : IRobotDriver
+│                                 (OFS/NG qua TCP; giới hạn lệch và chờ trả lời chỉnh trên UI)
+│
+├─ Communication.<Hãng khác>/                   sau này: Siemens, Omron, Keyence, Fanuc, ...
+│
+└─ Vision.UI/                                   WPF (→ Vision, Communication, các project hãng)
+   ├─ App.xaml(.cs) ............ class App       OnStartup gọi các <Hãng>Drivers.Register(...)
+   ├─ MainWindow.xaml(.cs) ..... class MainWindow
+   ├─ Themes/VsDark.xaml
+   ├─ Services/
+   │  ├─ IDialogService.cs ..... interface IDialogService
+   │  ├─ DialogService.cs ...... class DialogService
+   │  └─ UiLogger.cs ........... class UiLogger : IVisionLogger
+   │
+   ├─ ViewModels/
+   │  ├─ ViewModelBase.cs ...... abstract ViewModelBase : ObservableObject
+   │  ├─ MainViewModel.cs ...... gom Editor, Toolbox, Properties, Run, Roi, Devices
+   │  ├─ Graph:      GraphEditorViewModel, NodeViewModel, ConnectorViewModel,
+   │  │              ConnectionViewModel, PendingConnectionViewModel
+   │  ├─ Toolbox:    ToolboxViewModel, ToolboxGroupViewModel, ToolboxItemViewModel
+   │  ├─ Thuộc tính: PropertyPanelViewModel, ParameterViewModel (abstract),
+   │  │              TextParameterViewModel, BoolParameterViewModel
+   │  ├─ Chạy / ảnh: RunViewModel, NodeResultRowViewModel, ImageDisplay (record)
+   │  ├─ ROI:        RoiEditorViewModel, RoiGeometry (record)
+   │  └─ Thiết bị:   DeviceConfigViewModel (6 tab, lưu, kết nối tất cả),
+   │                 DeviceTypeViewModel (một tab: thêm/xóa/quét IP),
+   │                 DeviceViewModel (một thiết bị: tên, bật/tắt, PLC nguồn, kết nối),
+   │                 FieldViewModel (một ô nhập, sinh từ FieldDef)
+   │
+   └─ Views/  (mỗi view gồm .xaml và .xaml.cs)
+      ├─ GraphEditorView        sửa đồ thị (Nodify)
+      ├─ ToolboxPanel           danh sách tool
+      ├─ PropertiesPanel        tham số node đang chọn
+      ├─ ImageViewerPanel       ảnh gốc / ảnh xử lý + vẽ ROI
+      ├─ ConnectionsPanel       thẻ trạng thái từng thiết bị
+      ├─ DeviceConfigWindow     cửa sổ cấu hình (tab theo loại)
+      └─ FieldsEditor           sinh ô nhập từ danh sách FieldViewModel
