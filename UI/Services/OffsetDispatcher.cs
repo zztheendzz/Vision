@@ -34,6 +34,7 @@ namespace UI.Services
     public sealed class OffsetDispatcher
     {
         public const string PlaceToolId = "PlaceCompensation";
+        public const string PickToolId = "PickCompensation";
 
         private readonly DeviceManager _devices;
         private readonly Func<PlcMap?>? _plcMap;
@@ -52,12 +53,6 @@ namespace UI.Services
             if (mode != RunMode.Live)
                 return new DispatchResult(false, true, "Không phải chạy thật: không gửi cho robot.");
 
-            var placeNodes = graph.Nodes.Where(n => n.ToolName == PlaceToolId).ToList();
-            if (placeNodes.Count == 0)
-                return new DispatchResult(false, true, "Đồ thị không có node PlaceCompensation: không có độ bù để gửi.");
-            if (placeNodes.Count > 1)
-                return new DispatchResult(false, false, "Có nhiều node PlaceCompensation: chưa biết gửi cái nào. Giữ lại một node.");
-
             // Lỗi ở bất kỳ node nào: không gửi (kể cả NG), để người vận hành kiểm tra
             foreach (var node in graph.Nodes)
             {
@@ -67,11 +62,17 @@ namespace UI.Services
                     return new DispatchResult(false, false, $"{node.ToolName} bị lỗi ({nr.Message}): KHÔNG gửi gì cho robot.");
             }
 
-            // Robot nhận độ bù qua PLC: ghi thanh ghi Calib X, Y, Z, R, không cần nối trực tiếp với robot
+            // Robot nhận độ bù qua PLC: ghi thanh ghi Calib, không cần nối trực tiếp với robot
             var plcRobot = _devices.RobotConfigs.FirstOrDefault(
                 c => c.Enabled && MitsubishiPointSettings.Read(c).Mode == RobotSendMode.ViaPlc);
             if (plcRobot != null)
-                return await DispatchViaPlcAsync(plcRobot, graph, run, placeNodes[0], cancellationToken);
+                return await DispatchViaPlcAsync(plcRobot, graph, run, cancellationToken);
+
+            var placeNodes = graph.Nodes.Where(n => n.ToolName == PlaceToolId).ToList();
+            if (placeNodes.Count == 0)
+                return new DispatchResult(false, true, "Đồ thị không có node PlaceCompensation: không có độ bù để gửi.");
+            if (placeNodes.Count > 1)
+                return new DispatchResult(false, false, "Có nhiều node PlaceCompensation: chưa biết gửi cái nào. Giữ lại một node.");
 
             var robots = _devices.ConnectedRobots();
             if (robots.Count == 0)
@@ -117,18 +118,34 @@ namespace UI.Services
 
         /// <summary>
         /// Chế độ "Qua PLC": ghi (dX, dY, 0, dRz) vào thanh ghi Calib X, Y, Z, R của PLC; PLC chuyển cho robot.
-        /// Không thấy vật thì KHÔNG ghi gì (bit NG do PLC báo như thường lệ).
+        /// Nguồn độ bù chọn ở cấu hình robot (ô "Gửi độ bù của tool nào"): không gửi / PlaceCompensation / PickCompensation / cả hai.
+        /// Mỗi loại ghi vào nhóm thanh ghi riêng (đặt: Pos.Calib.*, gắp: Pos.CalibPick.*).
+        /// Không thấy vật hoặc thiếu kết quả của một nguồn đã chọn thì KHÔNG ghi gì (bit NG do PLC báo như thường lệ).
         /// </summary>
         private async Task<DispatchResult> DispatchViaPlcAsync(
-            DeviceConfig robotCfg, VisionGraph graph, GraphRunResult run, VisionNode placeNode, CancellationToken ct)
+            DeviceConfig robotCfg, VisionGraph graph, GraphRunResult run, CancellationToken ct)
         {
-            bool anyNoResult = graph.Nodes.Any(n => run.Nodes.TryGetValue(n.Id, out var r) && r.Result?.Status == ResultStatus.NoResult);
-            run.Nodes.TryGetValue(placeNode.Id, out var placeRun);
+            string source = robotCfg.GetString("PlcSource").Trim();
+            if (source.Length == 0) source = DeviceSchemas.PlcSourcePlace;
 
-            if (anyNoResult || placeRun?.Result is not { Status: ResultStatus.Ok } placeResult
-                            || !placeResult.TryGet<RobotOffset>("Correction", out var offset))
+            bool wantPlace = source == DeviceSchemas.PlcSourcePlace || source == DeviceSchemas.PlcSourceBoth;
+            bool wantPick = source == DeviceSchemas.PlcSourcePick || source == DeviceSchemas.PlcSourceBoth;
+            if (!wantPlace && !wantPick)
+                return new DispatchResult(false, true, $"{robotCfg.Name}: đang chọn '{DeviceSchemas.PlcSourceNone}', không ghi độ bù nào xuống PLC.");
+
+            // Mỗi nguồn đã chọn cần đúng một node trong đồ thị
+            VisionNode? placeNode = null, pickNode = null;
+            if (wantPlace && !TryFindSingle(graph, PlaceToolId, out placeNode, out string? e1)) return new DispatchResult(false, false, e1!);
+            if (wantPick && !TryFindSingle(graph, PickToolId, out pickNode, out string? e2)) return new DispatchResult(false, false, e2!);
+
+            bool anyNoResult = graph.Nodes.Any(n => run.Nodes.TryGetValue(n.Id, out var r) && r.Result?.Status == ResultStatus.NoResult);
+
+            RobotOffset placeOffset = default, pickOffset = default;
+            bool havePlace = !wantPlace || (TryGetOffset(run, placeNode!, "Correction", out placeOffset));
+            bool havePick = !wantPick || (TryGetOffset(run, pickNode!, "Offset", out pickOffset));
+            if (anyNoResult || !havePlace || !havePick)
                 return new DispatchResult(false, true,
-                    "Không có độ bù (không thấy vật): KHÔNG ghi thanh ghi Calib. NG do PLC báo bằng bit NG.");
+                    "Không có độ bù (không thấy vật hoặc thiếu kết quả của tool đã chọn): KHÔNG ghi thanh ghi Calib nào. NG do PLC báo bằng bit NG.");
 
             var map = _plcMap?.Invoke();
             if (map == null)
@@ -138,18 +155,77 @@ namespace UI.Services
             if (plc == null)
                 return new DispatchResult(true, false, "PLC chưa kết nối: KHÔNG ghi được độ bù cho robot.");
 
-            var result = await PlcOffsetWriter.WriteAsync(
-                plc, map, offset.Dx, offset.Dy, 0, offset.Drz,
-                robotCfg.GetDouble("MaxOffsetMm", 50), robotCfg.GetDouble("MaxOffsetDeg", 30), ct);
+            double maxMm = robotCfg.GetDouble("MaxOffsetMm", 50), maxDeg = robotCfg.GetDouble("MaxOffsetDeg", 30);
 
-            if (!result.Success)
-                return new DispatchResult(true, false, $"Ghi độ bù {offset} vào PLC thất bại: {result.Message}");
+            var jobs = new List<(string Name, string Prefix, RobotOffset Offset, string Note)>();
+            if (wantPlace)
+                jobs.Add(("đặt", PlcOffsetWriter.PlacePrefix, placeOffset, ConventionNote("PlaceCompensation", ReadEnum(placeNode!, PlaceOffsetConvention.Additive))));
+            if (wantPick)
+                jobs.Add(("gắp", PlcOffsetWriter.PickPrefix, pickOffset, ConventionNote("PickCompensation", ReadEnum(pickNode!, OffsetConvention.AboutRobotOrigin), OffsetConvention.Additive)));
 
-            var convention = ReadConvention(placeNode);
-            string convNote = convention == PlaceOffsetConvention.Additive
+            // Kiểm tra hết mọi nhóm trước, rồi mới ghi nhóm đầu tiên: lỗi ở nhóm sau thì chưa có gì bị ghi
+            if (jobs.Count > 1)
+            {
+                string? overlap = PlcOffsetWriter.FindOverlapBetween(map, jobs.Select(j => j.Prefix).ToArray());
+                if (overlap != null)
+                    return new DispatchResult(true, false, $"Nhóm thanh ghi đặt và gắp trùng nhau: {overlap} KHÔNG ghi gì.");
+            }
+            foreach (var job in jobs)
+            {
+                var check = await PlcOffsetWriter.WriteAsync(plc, map, job.Offset.Dx, job.Offset.Dy, 0, job.Offset.Drz, maxMm, maxDeg, ct, job.Prefix, dryRun: true);
+                if (!check.Success)
+                    return new DispatchResult(true, false, $"Độ bù {job.Name} {job.Offset} không ghi được: {check.Message}. KHÔNG ghi gì.");
+            }
+
+            var done = new List<string>();
+            foreach (var job in jobs)
+            {
+                var result = await PlcOffsetWriter.WriteAsync(plc, map, job.Offset.Dx, job.Offset.Dy, 0, job.Offset.Drz, maxMm, maxDeg, ct, job.Prefix);
+                if (!result.Success)
+                {
+                    string already = done.Count == 0 ? "" : $" Đã ghi trước đó: {string.Join(" | ", done)}. PLC đang giữ độ bù {string.Join(", ", done.Select(d => d.Split(':')[0]))} của lần này.";
+                    return new DispatchResult(true, false, $"Ghi độ bù {job.Name} {job.Offset} vào PLC thất bại: {result.Message}.{already}");
+                }
+                done.Add($"{job.Name}: {result.Message}{job.Note}");
+            }
+
+            return new DispatchResult(true, true, $"Đã ghi độ bù vào PLC. {string.Join(" | ", done)}");
+        }
+
+        private static bool TryFindSingle(VisionGraph graph, string toolId, out VisionNode? node, out string? error)
+        {
+            var nodes = graph.Nodes.Where(n => n.ToolName == toolId).ToList();
+            node = nodes.Count == 1 ? nodes[0] : null;
+            error = nodes.Count switch
+            {
+                0 => $"Đồ thị không có node {toolId}, nhưng cấu hình robot đang chọn gửi độ bù của tool này.",
+                1 => null,
+                _ => $"Có nhiều node {toolId}: chưa biết gửi cái nào. Giữ lại một node."
+            };
+            return nodes.Count == 1;
+        }
+
+        private static bool TryGetOffset(GraphRunResult run, VisionNode node, string port, out RobotOffset offset)
+        {
+            offset = default;
+            return run.Nodes.TryGetValue(node.Id, out var nr)
+                   && nr.Result is { Status: ResultStatus.Ok } result
+                   && result.TryGet<RobotOffset>(port, out offset);
+        }
+
+        private static T ReadEnum<T>(VisionNode node, T fallback) where T : struct, Enum
+        {
+            if (!node.Parameters.TryGetValue("Convention", out var value)) return fallback;
+            if (value is T t) return t;
+            return Enum.TryParse(value?.ToString(), true, out T parsed) ? parsed : fallback;
+        }
+
+        private static string ConventionNote<T>(string tool, T convention, T? expected = null) where T : struct, Enum
+        {
+            T want = expected ?? (T)Enum.Parse(typeof(T), "Additive");
+            return EqualityComparer<T>.Default.Equals(convention, want)
                 ? ""
-                : $" Lưu ý: node đang dùng quy ước {convention}, PLC/robot phải áp độ bù theo quy ước đó.";
-            return new DispatchResult(true, true, $"Đã ghi độ bù {offset} vào PLC (thanh ghi Calib): {result.Message}.{convNote}");
+                : $" (Lưu ý: {tool} đang dùng quy ước {convention}, PLC/robot phải áp độ bù theo quy ước đó, không phải cộng thẳng)";
         }
 
         private static PlaceOffsetConvention ReadConvention(VisionNode node)

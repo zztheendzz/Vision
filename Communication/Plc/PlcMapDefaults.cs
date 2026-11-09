@@ -17,6 +17,33 @@ namespace Communication.Plc
         public const string GroupScan = "Scan tay hút";
         public const string GroupError = "Lỗi";
 
+        /// <summary>
+        /// Thêm nhóm thanh ghi "Calib gắp" (độ bù của PickCompensation) nếu bản đồ chưa có. Địa chỉ để TRỐNG:
+        /// máy nào dùng thì điền, không điền thì không gửi được độ bù gắp (có báo lỗi rõ). Gọi cả khi mở file cũ.
+        /// </summary>
+        public static void EnsurePickOffset(PlcMap map)
+        {
+            string[] axes = { "X", "Y", "Z", "R" };
+            const string note = "C# ghi độ bù GẮP (PickCompensation) vào đây khi chọn gửi độ bù gắp. Địa chỉ để trống: điền địa chỉ thanh ghi PLC. " +
+                                "Giả định: số 32 bit có dấu, đơn vị PLC = 0.001 mm (R: 0.001 độ). SỬA Kiểu và Hệ số theo PLC.";
+            foreach (string axis in axes)
+            {
+                string key = $"Pos.CalibPick.{axis}";
+                if (map.FindItem(key) != null) continue;
+                map.Items.Add(new SignalItem
+                {
+                    Group = GroupMotion,
+                    Key = key,
+                    Title = $"Độ bù GẮP gửi robot {axis} (Calib gắp)",
+                    Address = "",
+                    Kind = SignalKind.DWord,
+                    Signed = true,
+                    Scale = 0.001,
+                    Note = note
+                });
+            }
+        }
+
         public static PlcMap Create()
         {
             var map = new PlcMap { Machine = "Máy mẫu" };
@@ -62,8 +89,9 @@ namespace Communication.Plc
             // Calib X, Y, Z, R: nơi C# GHI độ bù, PLC lấy chuyển cho robot (chế độ gửi "Qua PLC")
             const string calibNote = "C# ghi độ bù vào đây, PLC chuyển cho robot. Giả định: số 32 bit có dấu, đơn vị PLC = 0.001 mm (R: 0.001 độ). SỬA Kiểu và Hệ số theo PLC.";
             for (int a = 0; a < 4; a++)
-                Reg(GroupMotion, $"Pos.Calib.{axes[a]}", $"Độ bù gửi robot {axes[a]} (Calib)", $"D{80 + 2 * a}",
+                Reg(GroupMotion, $"Pos.Calib.{axes[a]}", $"Độ bù ĐẶT gửi robot {axes[a]} (Calib)", $"D{80 + 2 * a}",
                     SignalKind.DWord, true, calibNote, scale: 0.001);
+            EnsurePickOffset(map);
             for (int a = 0; a < 4; a++)
                 Reg(GroupMotion, $"Pos.Cur.{axes[a]}", $"Tọa độ hiện tại {axes[a]}", $"D{70 + 2 * a}", SignalKind.DWord, true, posNote);
 

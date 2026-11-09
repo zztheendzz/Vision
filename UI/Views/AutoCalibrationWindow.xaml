@@ -95,20 +95,12 @@
                     <TabItem Header="2. Chụp tại vị trí cố định">
                         <StackPanel Margin="10">
                             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource VsMutedBrush}" Margin="0,0,0,8"
-                                   Text="Robot đi tới điểm chụp, chụp ảnh, tìm vật, đổi sang tọa độ robot qua file hiệu chuẩn rồi GHI vào điểm đích. X, Y và góc lấy từ ảnh; Z, A, B và cờ giữ nguyên từ điểm đích hiện có. Độ lệch so với điểm đích cũ bị chặn theo giới hạn trong cấu hình robot." />
+                                   Text="Chụp ảnh tại vị trí cố định, tìm vật, đổi sang tọa độ robot qua file hiệu chuẩn, rồi tính ĐỘ BÙ = tư thế vật bây giờ trừ tư thế chuẩn. Độ bù (dX, dY, dRz) được GHI VÀO THANH GHI PLC (địa chỉ ở Bản đồ tín hiệu PLC); PLC cộng vào điểm đã dạy. Không ghi gì vào robot. Làm 2 bước: (1) đặt vật đúng vị trí dạy rồi bấm 'Lấy vị trí vật hiện tại làm chuẩn'; (2) từ lần sau bấm 'Chụp và gửi độ bù'." />
 
                             <WrapPanel>
-                                <StackPanel Margin="0,0,12,8" Width="200">
-                                    <TextBlock Text="Điểm chụp (để trống = đứng yên)" Foreground="{StaticResource VsMutedBrush}" />
+                                <StackPanel Margin="0,0,12,8" Width="220">
+                                    <TextBlock Text="Điểm chụp (để trống = máy đã ở sẵn)" Foreground="{StaticResource VsMutedBrush}" />
                                     <TextBox Text="{Binding ShotPoint, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <StackPanel Margin="0,0,12,8" Width="200">
-                                    <TextBlock Text="Điểm ghi tọa độ (điểm gắp)" Foreground="{StaticResource VsMutedBrush}" />
-                                    <TextBox Text="{Binding TargetPoint, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <StackPanel Margin="0,0,12,8" Width="130">
-                                    <TextBlock Text="Cộng thêm vào góc (độ)" Foreground="{StaticResource VsMutedBrush}" />
-                                    <TextBox Text="{Binding RzOffsetDeg, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Margin="0,0,12,8" Width="110">
                                     <TextBlock Text="Tốc độ (%)" Foreground="{StaticResource VsMutedBrush}" />
@@ -120,12 +112,36 @@
                                 </StackPanel>
                             </WrapPanel>
 
+                            <TextBlock Text="Tư thế chuẩn của vật (hệ robot, mm / độ). Bấm nút bên dưới để lấy tự động."
+                                   Foreground="{StaticResource VsMutedBrush}" Margin="0,0,0,2" />
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="X chuẩn" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding RefX, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Y chuẩn" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding RefY, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,8" Width="110">
+                                    <TextBlock Text="Góc chuẩn" Foreground="{StaticResource VsMutedBrush}" />
+                                    <TextBox Text="{Binding RefRz, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <CheckBox Content="Đã dạy vị trí chuẩn (tự bật khi lấy chuẩn; bỏ chọn = chưa dạy, không cho gửi)"
+                                  IsChecked="{Binding ReferenceTaught}" Margin="0,0,0,8" />
+                            <Button Content="Lấy vị trí vật hiện tại làm chuẩn" HorizontalAlignment="Left" Width="280"
+                                Style="{StaticResource OutlineButton}" Margin="0,0,0,10"
+                                Command="{Binding TeachReferenceCommand}" />
+
                             <CheckBox Content="Đảo chiều góc (nếu trục xoay của robot ngược chiều)"
                                   IsChecked="{Binding InvertRz}" Margin="0,0,0,4" />
-                            <CheckBox Content="Ghi vào robot (bỏ chọn = chỉ đo và báo kết quả, để thử)"
-                                  IsChecked="{Binding SendToRobot}" Margin="0,0,0,8" />
+                            <CheckBox Content="Ghi vào nhóm thanh ghi Calib ĐẶT (bỏ chọn = nhóm Calib GẮP)"
+                                  IsChecked="{Binding UseCalibPlaceGroup}" Margin="0,0,0,4" />
+                            <CheckBox Content="Ghi vào PLC (bỏ chọn = chỉ đo và báo kết quả, để thử)"
+                                  IsChecked="{Binding SendToPlc}" Margin="0,0,0,8" />
 
-                            <Button Content="Chụp và gửi cho robot" HorizontalAlignment="Left" Width="240"
+                            <Button Content="Chụp và gửi độ bù" HorizontalAlignment="Left" Width="240"
                                 Style="{StaticResource AccentButton}"
                                 Command="{Binding ShootAndSendCommand}" />
                         </StackPanel>
@@ -144,5 +160,6 @@
                 </DockPanel>
             </Grid>
         </DockPanel>
+
     </Grid>
 </Window>

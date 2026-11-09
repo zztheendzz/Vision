@@ -60,7 +60,7 @@ namespace UI.ViewModels
             Properties = new PropertyPanelViewModel();
             Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager, () => PlcMap?.Map), Devices.Manager);
             Roi = new RoiEditorViewModel(Editor, Properties);
-            AutoCal = new AutoCalibrationViewModel(Devices.Manager, Run, dialogs);
+            AutoCal = new AutoCalibrationViewModel(Devices.Manager, Run, dialogs, () => PlcMap?.Map);
             PlcMap = new PlcMapViewModel(Devices.Manager, dialogs);
 
             // Chọn node nào trên đồ thị thì bảng thuộc tính hiển thị tham số của node đó

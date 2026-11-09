@@ -23,7 +23,13 @@ namespace Vision.Tools.Locate
         /// (Dx, Dy) = tâm vật hiện tại trừ tâm vật lúc dạy, Drz = góc xoay thêm.
         /// Robot xoay điểm đã dạy QUANH TÂM MẪU:  P' = O_now + R(Drz)·(P - O_ref). Robot phải biết O_ref (xem Values RefX, RefY).
         /// </summary>
-        AboutReferencePoint
+        AboutReferencePoint,
+
+        /// <summary>
+        /// Cộng thẳng vào điểm gắp đã dạy:  X' = X + Dx,  Y' = Y + Dy,  Rz' = Rz + Drz. Dùng khi PLC / robot chỉ CỘNG độ bù vào điểm dạy.
+        /// (Dx, Dy) = điểm gắp mới trừ điểm gắp đã dạy, nên PHẢI nhập TaughtX / TaughtY / TaughtRz (điểm gắp đã dạy, hệ robot).
+        /// </summary>
+        Additive
     }
 
     /// <summary>
@@ -62,7 +68,7 @@ namespace Vision.Tools.Locate
         public override IReadOnlyList<ParamDef> Parameters { get; } = new[]
         {
             new ParamDef("CalibrationPath", typeof(string), "calibration.json", Description: "File hiệu chuẩn camera - robot"),
-            new ParamDef("Convention", typeof(OffsetConvention), OffsetConvention.AboutRobotOrigin, Description: "Cách robot áp độ bù"),
+            new ParamDef("Convention", typeof(OffsetConvention), OffsetConvention.AboutRobotOrigin, Description: "Cách robot áp độ bù. Additive = PLC/robot cộng thẳng vào điểm dạy (phải nhập TaughtX/Y/Rz)"),
             new ParamDef("MaxShiftMm",  typeof(double), 100.0, Min: 0, Description: "Vật lệch quá số mm này so với mẫu thì từ chối"),
             new ParamDef("MaxAngleDeg", typeof(double), 180.0, Min: 0, Max: 180, Description: "Vật xoay quá số độ này so với mẫu thì từ chối"),
             new ParamDef("HasTaughtPick", typeof(bool), false, Description: "Bật để tính thêm điểm gắp tuyệt đối từ điểm đã dạy"),
@@ -109,9 +115,20 @@ namespace Vision.Tools.Locate
             double tx = nowX - (cos * refX - sin * refY);
             double ty = nowY - (sin * refX + cos * refY);
 
-            var offset = input.Get<OffsetConvention>("Convention") == OffsetConvention.AboutRobotOrigin
-                ? new RobotOffset(tx, ty, dTheta)
-                : new RobotOffset(nowX - refX, nowY - refY, dTheta);
+            var convention = input.Get<OffsetConvention>("Convention");
+            double taughtX = input.Get<double>("TaughtX");
+            double taughtY = input.Get<double>("TaughtY");
+
+            RobotOffset offset = convention switch
+            {
+                OffsetConvention.AboutRobotOrigin => new RobotOffset(tx, ty, dTheta),
+                // Cộng thẳng: điểm gắp mới trừ điểm đã dạy (xoay điểm dạy quanh tâm mẫu rồi dịch theo vật)
+                OffsetConvention.Additive => new RobotOffset(
+                    cos * taughtX - sin * taughtY + tx - taughtX,
+                    sin * taughtX + cos * taughtY + ty - taughtY,
+                    dTheta),
+                _ => new RobotOffset(nowX - refX, nowY - refY, dTheta)
+            };
 
             var result = VisionToolResult.Ok($"Bù {offset}").Add("Offset", offset);
             result.Values["dX"] = Fmt(offset.Dx);
@@ -120,7 +137,7 @@ namespace Vision.Tools.Locate
             result.Values["RefX"] = Fmt(refX);       // robot cần khi dùng quy ước quanh điểm mẫu
             result.Values["RefY"] = Fmt(refY);
 
-            if (input.Get<bool>("HasTaughtPick"))
+            if (input.Get<bool>("HasTaughtPick") || convention == OffsetConvention.Additive)
             {
                 double px = input.Get<double>("TaughtX");
                 double py = input.Get<double>("TaughtY");

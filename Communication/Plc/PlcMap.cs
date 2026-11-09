@@ -160,6 +160,7 @@ namespace Communication.Plc
             if (map.FormatVersion != PlcMap.CurrentVersion)
                 throw new InvalidDataException($"Không hỗ trợ FormatVersion {map.FormatVersion}");
             map.Normalize();
+            PlcMapDefaults.EnsurePickOffset(map);        // file cũ chưa có nhóm Calib gắp: thêm vào (địa chỉ trống)
             return map;
         }
 

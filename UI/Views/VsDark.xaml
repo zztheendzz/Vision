@@ -7,9 +7,9 @@
     <SolidColorBrush x:Key="VsPanelBrush"       Color="#252526" />
     <SolidColorBrush x:Key="VsPanelHeaderBrush" Color="#2D2D30" />
     <SolidColorBrush x:Key="VsInputBrush"       Color="#333337" />
-    <SolidColorBrush x:Key="VsBorderBrush"      Color="#3F3F46" />
+    <SolidColorBrush x:Key="VsBorderBrush"      Color="#1E1E1E" />
     <SolidColorBrush x:Key="VsTextBrush"        Color="#F1F1F1" />
-    <SolidColorBrush x:Key="VsMutedBrush"       Color="#9D9D9D" />
+    <SolidColorBrush x:Key="VsMutedBrush"       Color="#595959" />
     <SolidColorBrush x:Key="VsHoverBrush"       Color="#3E3E40" />
     <SolidColorBrush x:Key="VsSelectedBrush"    Color="#094771" />
     <SolidColorBrush x:Key="VsAccentBrush"      Color="#007ACC" />

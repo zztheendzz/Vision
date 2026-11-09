@@ -167,7 +167,7 @@
                 <WrapPanel>
                     <TextBlock Text="Thử trên PLC đang nối:" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <TextBox Width="90" Text="{Binding TestAddress, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}" Command="{Binding TestReadBitCommand}" />
+                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}" Command="{Binding TestReadBitCommand}" Click="Button_Click" />
                     <Button Content="Đọc thanh ghi" Style="{StaticResource OutlineButton}" Command="{Binding TestReadWordCommand}" />
                     <Button Content="Ghi bit = 1" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOnCommand}" />
                     <Button Content="Ghi bit = 0" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOffCommand}" />

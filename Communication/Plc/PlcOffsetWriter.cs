@@ -20,13 +20,20 @@ namespace Communication.Plc
     /// </summary>
     public static class PlcOffsetWriter
     {
-        public static readonly string[] Keys = { "Pos.Calib.X", "Pos.Calib.Y", "Pos.Calib.Z", "Pos.Calib.R" };
+        /// <summary>Tiền tố khóa nhóm thanh ghi độ bù ĐẶT (PlaceCompensation).</summary>
+        public const string PlacePrefix = "Pos.Calib";
+        /// <summary>Tiền tố khóa nhóm thanh ghi độ bù GẮP (PickCompensation).</summary>
+        public const string PickPrefix = "Pos.CalibPick";
+
+        public static readonly string[] Keys = KeysFor(PlacePrefix);
+
+        public static string[] KeysFor(string prefix) => new[] { $"{prefix}.X", $"{prefix}.Y", $"{prefix}.Z", $"{prefix}.R" };
 
         private sealed record Plan(string Key, SignalItem Item, PlcAddress Address, long Raw, double Value, int Words);
 
         public static async Task<PlcOffsetResult> WriteAsync(
             IPlcDriver plc, PlcMap map, double dx, double dy, double dz, double drz,
-            double maxOffsetMm, double maxOffsetDeg, CancellationToken ct = default)
+            double maxOffsetMm, double maxOffsetDeg, CancellationToken ct = default, string prefix = PlacePrefix, bool dryRun = false)
         {
             if (!plc.IsConnected) return Fail("PLC chưa kết nối.");
 
@@ -39,15 +46,16 @@ namespace Communication.Plc
 
             // ---------- Lập kế hoạch: kiểm tra hết trước khi ghi ----------
             var plans = new List<Plan>();
-            for (int i = 0; i < Keys.Length; i++)
+            var keys = KeysFor(prefix);
+            for (int i = 0; i < keys.Length; i++)
             {
-                string key = Keys[i];
+                string key = keys[i];
                 var item = map.FindItem(key);
                 if (item == null) return Fail($"Bản đồ tín hiệu chưa có '{key}'.");
 
                 if (string.IsNullOrWhiteSpace(item.Address))
                 {
-                    if (key == "Pos.Calib.Z" && values[i] == 0) continue;     // máy không dùng Z
+                    if (key.EndsWith(".Z", StringComparison.Ordinal) && values[i] == 0) continue;     // máy không dùng Z
                     return Fail($"'{item.Title}' ({key}) chưa có địa chỉ trong bản đồ tín hiệu.");
                 }
                 if (!PlcAddress.TryParse(item.Address, out var address, out string? error))
@@ -77,6 +85,9 @@ namespace Communication.Plc
                         && plans[i].Address.Number < plans[j].Address.Number + plans[j].Words
                         && plans[j].Address.Number < plans[i].Address.Number + plans[i].Words)
                         return Fail($"{plans[i].Key} ({plans[i].Address}) và {plans[j].Key} ({plans[j].Address}) chồng lên nhau trong PLC.");
+
+            // Chỉ kiểm tra, chưa ghi (dùng khi phải ghi nhiều nhóm: kiểm hết rồi mới ghi nhóm đầu tiên)
+            if (dryRun) return new PlcOffsetResult(true, "Hợp lệ (chưa ghi).");
 
             // ---------- Danh sách thanh ghi cần ghi ----------
             var words = new List<(string Address, short Value)>();
@@ -121,8 +132,33 @@ namespace Communication.Plc
             }
 
             string detail = string.Join("; ", plans.Select(p =>
-                $"{p.Key.Replace("Pos.Calib.", "")} {p.Address}{(p.Words == 2 ? "+1" : "")} ← {p.Raw} ({p.Value:0.###})"));
+                $"{p.Key[(p.Key.LastIndexOf('.') + 1)..]} {p.Address}{(p.Words == 2 ? "+1" : "")} ← {p.Raw} ({p.Value:0.###})"));
             return new PlcOffsetResult(true, detail);
+        }
+
+        /// <summary>
+        /// Các nhóm thanh ghi (ví dụ độ bù đặt và độ bù gắp) không được trùng nhau, nếu không nhóm ghi sau đè nhóm ghi trước.
+        /// Trả về thông báo lỗi, hoặc null nếu ổn. Chỉ xét các tín hiệu đã có địa chỉ hợp lệ.
+        /// </summary>
+        public static string? FindOverlapBetween(PlcMap map, params string[] prefixes)
+        {
+            var used = new List<(string Key, PlcAddress Address, int Words)>();
+            foreach (string prefix in prefixes)
+                foreach (string key in KeysFor(prefix))
+                {
+                    var item = map.FindItem(key);
+                    if (item == null || string.IsNullOrWhiteSpace(item.Address)) continue;
+                    if (!PlcAddress.TryParse(item.Address, out var address, out _)) continue;
+                    used.Add((key, address, item.Kind == SignalKind.DWord ? 2 : 1));
+                }
+
+            for (int i = 0; i < used.Count; i++)
+                for (int j = i + 1; j < used.Count; j++)
+                    if (used[i].Address.Device == used[j].Address.Device
+                        && used[i].Address.Number < used[j].Address.Number + used[j].Words
+                        && used[j].Address.Number < used[i].Address.Number + used[i].Words)
+                        return $"{used[i].Key} ({used[i].Address}) và {used[j].Key} ({used[j].Address}) chồng lên nhau trong PLC.";
+            return null;
         }
 
         private static (long Min, long Max) Range(SignalKind kind, bool signed) => (kind, signed) switch

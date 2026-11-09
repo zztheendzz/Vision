@@ -51,6 +51,15 @@ namespace Communication.Configuration
         /// <summary>Robot: ghi độ bù vào thanh ghi Calib X, Y, Z, R của PLC (địa chỉ ở Bản đồ tín hiệu PLC); PLC chuyển cho robot.</summary>
         public const string RobotSendViaPlc = "Qua PLC (ghi thanh ghi Calib X, Y, Z, R)";
 
+        /// <summary>Chế độ Qua PLC: không gửi độ bù nào (chỉ chạy và hiển thị kết quả).</summary>
+        public const string PlcSourceNone = "Không gửi";
+        /// <summary>Chế độ Qua PLC: gửi độ bù của node PlaceCompensation vào nhóm thanh ghi Calib (đặt).</summary>
+        public const string PlcSourcePlace = "Chỉ PlaceCompensation (độ bù đặt)";
+        /// <summary>Chế độ Qua PLC: gửi độ bù của node PickCompensation vào nhóm thanh ghi Calib gắp.</summary>
+        public const string PlcSourcePick = "Chỉ PickCompensation (độ bù gắp)";
+        /// <summary>Chế độ Qua PLC: gửi cả hai, mỗi loại vào nhóm thanh ghi riêng.</summary>
+        public const string PlcSourceBoth = "Cả hai (đặt và gắp)";
+
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
         private static FieldDef Int(string key, string label, int def, double min, double max, string section = "", string hint = "")
@@ -169,6 +178,8 @@ namespace Communication.Configuration
                     WhenMitsubishi(Bool("EnableOnConnect", "Bật servo khi kết nối", false, "Điều khiển",
                         "Tắt là an toàn: chương trình không tự bật servo robot. Bật ô này cũng chiếm quyền điều khiển")),
                     Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendOverwrite, RobotSendPacket, RobotSendViaPlc }, "Độ bù"),
+                    WhenSend(RobotSendViaPlc, Choice("PlcSource", "Gửi độ bù của tool nào", PlcSourcePlace,
+                        new[] { PlcSourceNone, PlcSourcePlace, PlcSourcePick, PlcSourceBoth }, "Độ bù")),
                     Txt("TargetPoint", "Điểm cần bù", "P1", "Độ bù",
                         "Chọn từ danh sách đọc ở nút 'Đọc danh sách điểm'. Dùng cho chế độ ghi đè điểm"),
                     Txt("PointProgram", "Chương trình chứa điểm", "", "Độ bù",
