@@ -115,8 +115,8 @@ namespace Communication.Mitsubishi
                 double dx = target.X - now.Point.X, dy = target.Y - now.Point.Y, dz = target.Z - now.Point.Z;
                 double distance = Math.Sqrt(dx * dx + dy * dy + dz * dz);
                 distanceText = $" (cách {distance:0.#} mm)";
-                if (enforceDistanceLimit && distance > _s.MaxMoveMm)
-                    return RobotReply.Fail($"Đích cách vị trí hiện tại {distance:0.#} mm, vượt giới hạn {_s.MaxMoveMm:0.#} mm, không di chuyển.");
+                //if (enforceDistanceLimit && distance > _s.MaxMoveMm)
+                //    return RobotReply.Fail($"Đích cách vị trí hiện tại {distance:0.#} mm, vượt giới hạn {_s.MaxMoveMm:0.#} mm, không di chuyển.");
             }
             else if (enforceDistanceLimit)
             {

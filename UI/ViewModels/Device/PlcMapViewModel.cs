@@ -39,7 +39,7 @@ namespace UI.ViewModels.Device
         [ObservableProperty] private double _testDr;
 
         public ObservableCollection<MapGroupVm> Groups { get; } = new();
-        public ObservableCollection<string> IssueLines { get; } = new();
+        public ObservableCollection<IssueLineVm> IssueLines { get; } = new();
 
         public string MachineName
         {
@@ -103,7 +103,9 @@ namespace UI.ViewModels.Device
         {
             var issues = PlcMapValidator.Validate(Map);
             IssueLines.Clear();
-            foreach (var issue in issues) IssueLines.Add(issue.ToString());
+            foreach (var issue in issues)
+                IssueLines.Add(new IssueLineVm(issue.Level == IssueLevel.Error, issue.Level == IssueLevel.Error ? "LỖI" : "CẢNH BÁO", issue.Where, issue.Message));
+            if (issues.Count == 0) IssueLines.Add(new IssueLineVm(false, "OK", "", "Không có lỗi hay trùng địa chỉ.", IsOk: true));
 
             int errors = issues.Count(i => i.Level == IssueLevel.Error);
             int warnings = issues.Count - errors;
@@ -377,4 +379,7 @@ namespace UI.ViewModels.Device
             }
         }
     }
+
+    /// <summary>Một dòng kết quả kiểm tra địa chỉ, tách thành nhãn / vị trí / nội dung để tô màu.</summary>
+    public sealed record IssueLineVm(bool IsError, string Label, string Where, string Message, bool IsOk = false);
 }

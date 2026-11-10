@@ -158,8 +158,43 @@
             </TabControl>
 
             <!-- ============ KIỂM TRA ĐỊA CHỈ ============ -->
-            <Expander Grid.Row="2" Header="Kiểm tra địa chỉ (lỗi, trùng, chồng lên nhau)" IsExpanded="True" Margin="0,8,0,0">
-                <ListBox ItemsSource="{Binding IssueLines}" MaxHeight="130" />
+            <Expander Grid.Row="2" Header="Kiểm tra địa chỉ (lỗi, trùng, chồng lên nhau)" IsExpanded="True" Margin="0,8,0,0"
+                      Foreground="{StaticResource VsTextBrush}">
+                <Border Background="#1B1B1C" BorderBrush="{StaticResource VsButtonBorderBrush}" BorderThickness="1" Padding="6,4" Margin="0,4,0,0">
+                    <ListBox Background="#1B1B1C" ItemsSource="{Binding IssueLines}" MaxHeight="150" HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="82" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="Badge" Grid.Column="0" CornerRadius="3" Padding="6,1" Margin="0,0,10,0"
+                                        Background="#E0A100" VerticalAlignment="Center">
+                                        <TextBlock x:Name="BadgeText" Text="{Binding Label}" Foreground="#1B1B1B"
+                                               FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding Where}" FontWeight="SemiBold"
+                                           Foreground="#FFFFFF" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="Msg" Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap"
+                                           Foreground="#E8E8E8" VerticalAlignment="Center" />
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsError}" Value="True">
+                                        <Setter TargetName="Badge" Property="Background" Value="#D13438" />
+                                        <Setter TargetName="BadgeText" Property="Foreground" Value="#FFFFFF" />
+                                        <Setter TargetName="Msg" Property="Foreground" Value="#FF9C9C" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsOk}" Value="True">
+                                        <Setter TargetName="Badge" Property="Background" Value="{StaticResource VsOkBrush}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
             </Expander>
 
             <!-- ============ ĐỌC / GHI THỬ ============ -->
@@ -167,7 +202,7 @@
                 <WrapPanel>
                     <TextBlock Text="Thử trên PLC đang nối:" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <TextBox Width="90" Text="{Binding TestAddress, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}" Command="{Binding TestReadBitCommand}" Click="Button_Click" />
+                    <Button Content="Đọc bit" Style="{StaticResource OutlineButton}" Command="{Binding TestReadBitCommand}" />
                     <Button Content="Đọc thanh ghi" Style="{StaticResource OutlineButton}" Command="{Binding TestReadWordCommand}" />
                     <Button Content="Ghi bit = 1" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOnCommand}" />
                     <Button Content="Ghi bit = 0" Style="{StaticResource OutlineButton}" Command="{Binding TestWriteBitOffCommand}" />
@@ -187,6 +222,7 @@
             </StackPanel>
         </Grid>
     </DockPanel>
+
 
 
 </Window>

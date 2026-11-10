@@ -17,10 +17,10 @@
 
   <ItemGroup>
     <Reference Include="halcondotnet">
-      <HintPath>halcon-runtime\bin\x64-win64\halcondotnet.dll</HintPath>
+      <HintPath>halcon-runtime\halcondotnet.dll</HintPath>
     </Reference>
     <Reference Include="hdevenginedotnet">
-      <HintPath>halcon-runtime\bin\x64-win64\hdevenginedotnet.dll</HintPath>
+      <HintPath>halcon-runtime\hdevenginedotnet.dll</HintPath>
     </Reference>
   </ItemGroup>
 
