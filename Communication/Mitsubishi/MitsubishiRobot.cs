@@ -19,7 +19,7 @@ namespace Communication.Mitsubishi
             string Ip, int Port, int RobotNo, string ClientName, bool EnableOnConnect,
             string RejectTemplate, double MaxOffsetMm, double MaxOffsetDeg,
             RobotPointSettings Points, int PointCount = 20, string PointProgram = "", bool TakeControlOnConnect = false,
-            double MaxMoveMm = 300);
+            double MaxMoveMm = 1000);
 
         private readonly Settings _s;
         private readonly SemaphoreSlim _lock = new(1, 1);
@@ -123,9 +123,27 @@ namespace Communication.Mitsubishi
                 return RobotReply.Fail("Không đọc được vị trí hiện tại nên không kiểm tra được khoảng cách, không di chuyển: " + now.Error);
             }
 
-            string command = (linear ? "MVS " : "MOV ") + target.ToMelfa();
-            return await ControlAsync($"Đã gửi: {command}{distanceText}", () => Lib.Execute(command), needControl: true, ct)
+            // Gán điểm vào biến tạm trước (chờ xong), rồi mới di chuyển tới biến đó. Gửi thẳng tọa độ trong MOV/MVS bị lỗi 2810
+            // trên robot này, còn cách gán biến rồi "MVS biến" đã chạy được.
+            const string TempPoint = "P99";   // dạng P+số như P4 bạn đã thử; tên chữ (PVIS) cần khai báo DEF POS nên có thể bị từ chối
+            string assign = $"{TempPoint}={target.ToMelfa()}";
+            string move = (linear ? "MVS " : "MOV ") + TempPoint;
+            string command = $"{assign}; {move}";
+            var reply = await ControlAsync($"Đã gửi: {command}{distanceText}", () =>
+            {
+                Lib.ExecuteBlocking(assign);
+                Lib.Execute(move);
+            }, needControl: true, ct)
                 .ConfigureAwait(false);
+            if (reply.Accepted) return reply;
+
+            // Lỗi: kèm lệnh đã gửi và vị trí (có cờ) robot đọc được lúc gửi, để so cờ điểm đầu / điểm cuối khi gặp lỗi 2810
+            string current = now.Ok ? now.Point.ToMelfa() : "không đọc được";
+            // Góc các khớp J1..J6 (JPOSF) để biết J5 có gần 0° (ranh giới cờ) không
+            string joints;
+            try { joints = await Task.Run(() => Lib.CurrentPositionJ.ToString(), ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { joints = "không đọc được: " + ex.Message; }
+            return RobotReply.Fail($"{reply.Error} [lệnh gửi: {command}; vị trí robot lúc gửi: {current}; các khớp: {joints}]");
         }
 
         public Task<RobotReply> SetSpeedAsync(int percent, CancellationToken ct = default)
@@ -162,7 +180,11 @@ namespace Communication.Mitsubishi
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return RobotReply.Fail($"Lệnh điều khiển robot lỗi: {ex.Message}");
+                string hint = ex.Message.Contains("5600", StringComparison.Ordinal)
+                    ? " → Bộ điều khiển robot đang ở trạng thái LỖI (alarm) nên không nhận lệnh. Xem mã lỗi trên teach pendant / RT ToolBox, " +
+                      "xử lý nguyên nhân (va chạm, vượt giới hạn, dừng khẩn, servo...), reset lỗi, bật servo rồi thử lại."
+                    : "";
+                return RobotReply.Fail($"Lệnh điều khiển robot lỗi: {ex.Message}{hint}");
             }
             finally { _lock.Release(); }
         }
@@ -521,7 +543,12 @@ namespace Communication.Mitsubishi
         {
             point = default;
             string text = position.ToString() ?? "";
-            if (text.Contains(")(") && RobotPoint.TryParse(text, out point)) { detail = ""; return true; }
+            // Thư viện in có dấu cách giữa hai nhóm: "(x, y, ... , NaN, NaN) (7, 0)"; chấp nhận cả ")(" lẫn ") ("
+            if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\)\s*\(") && RobotPoint.TryParse(text, out point))
+            {
+                detail = "";
+                return true;
+            }
 
             var type = position.GetType();
             double? Get(string prop)

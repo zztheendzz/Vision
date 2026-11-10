@@ -83,7 +83,7 @@ namespace Communication.Camera
         {
             LastError = string.Empty;
             string connectError = string.Empty;
-            void Capture(object s, string m) => connectError = m;
+            void Capture(object? s, string m) => connectError = m;
             OnError += Capture;
             bool ok;
             try { ok = Connect(DeviceId); }
@@ -167,7 +167,7 @@ namespace Communication.Camera
                 catch (HalconException ex)
                 {
                     _hAcqHandle = null;
-                    OnError?.Invoke(this, $"Lỗi OpenFramegrabber: {ex.Message}");
+                    OnError?.Invoke(this, $"Lỗi OpenFramegrabber (DeviceId đang dùng: '{(string.IsNullOrEmpty(cameraName) ? "default" : cameraName)}'): {ex.Message}. {DescribeFoundCameras()}");
                     return false;
                 }
                 catch (Exception ex)
@@ -177,6 +177,20 @@ namespace Communication.Camera
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Khi mở camera thất bại: liệt kê những camera HALCON (GigEVision2) thấy, để phân biệt
+        /// "không thấy camera" (IP / subnet / tường lửa) với "thấy nhưng không mở được" (đang bị chương trình khác giữ).
+        /// </summary>
+        private static string DescribeFoundCameras()
+        {
+            var list = ScanCameras(out string scanError);
+            if (scanError != null) return scanError;
+            return list.Count == 0
+                ? "HALCON không thấy camera GigE nào (kiểm tra IP cùng subnet với card mạng, tường lửa cho chương trình này)."
+                : "HALCON thấy: " + string.Join(" | ", list) +
+                  ". Camera có trong danh sách nhưng không mở được: thường do chương trình khác (SDK / viewer của hãng) đang giữ camera, hoặc DeviceId sai.";
         }
 
         /// <summary>
@@ -401,6 +415,45 @@ namespace Communication.Camera
             => SetParam("Contrast", new HTuple((int)Clamp(raw, 0, 200)), "Contrast");
 
         /// <summary>
+        /// Đọc giá trị hiện tại và khoảng cho phép (min, max) của một tham số số của camera ("ExposureTime", "Gain"...).
+        /// Trả false nếu camera không có tham số này hoặc không báo khoảng giá trị.
+        /// </summary>
+        public bool TryReadNumericParam(string name, out double current, out double min, out double max)
+        {
+            current = min = max = 0;
+            lock (_lockObj)
+            {
+                if (_hAcqHandle == null) return false;
+                try
+                {
+                    HOperatorSet.GetFramegrabberParam(_hAcqHandle, name, out HTuple value);
+                    double[] c = value.ToDArr();
+                    if (c.Length == 0) return false;
+
+                    HOperatorSet.GetFramegrabberParam(_hAcqHandle, name + "_range", out HTuple range);
+                    double[] r = range.ToDArr();
+                    if (r.Length < 2) return false;
+
+                    current = c[0];
+                    min = r[0];
+                    max = r[1];
+                    return max > min;
+                }
+                catch (Exception)
+                {
+                    return false;      // không hỗ trợ, hoặc kiểu giá trị không phải số
+                }
+            }
+        }
+
+        /// <summary>
+        /// Đặt một tham số số của camera theo giá trị gốc của camera (không cắt khoảng). Camera từ chối thì trả false và báo lỗi qua OnError.
+        /// <paramref name="integer"/> = true với tham số nguyên (Gamma, Contrast trên nhiều camera): làm tròn rồi gửi số nguyên.
+        /// </summary>
+        public bool SetNumericParam(string name, double value, bool integer, string label)
+            => SetParam(name, integer ? new HTuple((int)Math.Round(value)) : new HTuple(value), label);
+
+        /// <summary>
         /// Thiết lập tốc độ khung hình (Frame Rate / FPS).
         /// </summary>
         public bool SetFrameRate(double fps)
@@ -543,7 +596,7 @@ namespace Communication.Camera
             if (!IsConnected) throw new InvalidOperationException("Camera chưa kết nối.");
 
             var tcs = new TaskCompletionSource<HImage>(TaskCreationOptions.RunContinuationsAsynchronously);
-            void Handler(object sender, HObject frame)
+            void Handler(object? sender, HObject frame)
             {
                 HImage img = null;
                 try { img = new HImage(frame); }
@@ -692,7 +745,7 @@ namespace Communication.Camera
                     HOperatorSet.GetFramegrabberParam(_hAcqHandle, "Contrast_range", out HTuple cr);
                     HOperatorSet.GetFramegrabberParam(_hAcqHandle, "ExposureTime_range", out HTuple er);
 
-                    return( $"Gamma={g0}, range={range}\n" +
+                    return ($"Gamma={g0}, range={range}\n" +
                         $"ExposureAuto={ea}, PixelFormat={pf}\n" +
                         $"Gain_range={gr}\n" +
                         $"Contrast_range={cr}\n" +

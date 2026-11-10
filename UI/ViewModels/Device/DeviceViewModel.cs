@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HalconDotNet;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows.Controls;
 using UI.ViewModels.RunAndDisplay;
 using Vision.Graph;
@@ -48,6 +49,8 @@ namespace UI.ViewModels.Device
                     },
                     config.GetString))
                 .ToList();
+
+            if (IsCamera) BuildCameraParams();
         }
 
         public Guid Id => Config.Id;
@@ -354,21 +357,31 @@ namespace UI.ViewModels.Device
         [ObservableProperty] private double _targetB;
         [ObservableProperty] private double _targetC;
         [ObservableProperty] private bool _moveLinear = true;
-        private int _targetFlag1 = 7, _targetFlag2;      // cờ cấu hình lấy từ vị trí hiện tại, tay robot không đổi tư thế
+        private int _targetFlag1 = 7, _targetFlag2;      // cờ cấu hình lấy từ vị trí/điểm đã điền, tay robot không đổi tư thế
+        private bool _targetFilled;                       // đã điền các ô từ robot chưa (tránh đi tới Z = 0 do chưa nhập)
+
+        private async Task<bool> FillTargetFromCurrentAsync(IRobotDriver robot)
+        {
+            var r = await robot.GetCurrentPointAsync();
+            if (!r.Ok) { Message = "Đọc vị trí hiện tại lỗi: " + r.Error; return false; }
+
+            TargetX = r.Point.X; TargetY = r.Point.Y; TargetZ = r.Point.Z;
+            TargetA = r.Point.A; TargetB = r.Point.B; TargetC = r.Point.C;
+            _targetFlag1 = r.Point.Flag1; _targetFlag2 = r.Point.Flag2;
+            _targetFilled = true;
+            // Hiện cả chữ gốc robot trả về để đối chiếu cờ khi gặp lỗi 2810 (cờ tư thế không khớp)
+            string rawText = await robot.GetPositionTextAsync();
+            PositionText = $"{r.Point}\nLệnh sẽ gửi: {r.Point.ToMelfa()}\nChữ gốc từ robot: {rawText}";
+            return true;
+        }
 
         /// <summary>Điền các ô tọa độ bằng vị trí hiện tại của robot (rồi sửa lại số cần đổi).</summary>
         [RelayCommand]
         private async Task FillCurrentPositionAsync()
         {
             if (!TryGetRobot(out var robot)) return;
-            var r = await robot.GetCurrentPointAsync();
-            if (!r.Ok) { Message = "Đọc vị trí hiện tại lỗi: " + r.Error; return; }
-
-            TargetX = r.Point.X; TargetY = r.Point.Y; TargetZ = r.Point.Z;
-            TargetA = r.Point.A; TargetB = r.Point.B; TargetC = r.Point.C;
-            _targetFlag1 = r.Point.Flag1; _targetFlag2 = r.Point.Flag2;
-            PositionText = r.Point.ToString();
-            Message = "Đã điền vị trí hiện tại, sửa số cần đổi rồi bấm Di chuyển";
+            if (await FillTargetFromCurrentAsync(robot))
+                Message = "Đã điền vị trí hiện tại, sửa số cần đổi rồi bấm Di chuyển";
         }
 
         [RelayCommand]
@@ -376,9 +389,19 @@ namespace UI.ViewModels.Device
         {
             if (!TryGetRobot(out var robot)) return;
 
+            // Chưa điền các ô từ robot thì điền sẵn rồi dừng, để không gửi nhầm đích Z = 0
+            // Người dùng tự gõ số vào các ô thì coi như đã nhập (cờ giữ mặc định 7,0 nếu chưa điền từ robot)
+            bool typed = TargetX != 0 || TargetY != 0 || TargetZ != 0 || TargetA != 0 || TargetB != 0 || TargetC != 0;
+            if (!_targetFilled && !typed)
+            {
+                if (await FillTargetFromCurrentAsync(robot))
+                    Message = "Các ô chưa có số: đã điền vị trí hiện tại. Sửa số cần đổi rồi bấm Di chuyển lại";
+                return;
+            }
+
             var target = new RobotPoint(TargetX, TargetY, TargetZ, TargetA, TargetB, TargetC, _targetFlag1, _targetFlag2);
             string how = MoveLinear ? "đường thẳng (MVS)" : "nội suy khớp (MOV, đường đi có thể cong)";
-            if (!_owner.Dialogs.Confirm($"Robot sẽ chuyển động thật tới:\n{target}\nKiểu: {how}\n\nChắc chắn vùng làm việc trống và tay đang gần nút dừng khẩn?"))
+            if (!_owner.Dialogs.Confirm($"Robot sẽ chuyển động thật tới:\n{target}\nKiểu: {how}\nTốc độ: {SpeedPercent}%\n\nChắc chắn vùng làm việc trống và tay đang gần nút dừng khẩn?"))
                 return;
 
             var speed = await robot.SetSpeedAsync(SpeedPercent);
@@ -444,6 +467,7 @@ namespace UI.ViewModels.Device
             TargetX = read.Point.X; TargetY = read.Point.Y; TargetZ = read.Point.Z;
             TargetA = read.Point.A; TargetB = read.Point.B; TargetC = read.Point.C;
             _targetFlag1 = read.Point.Flag1; _targetFlag2 = read.Point.Flag2;
+            _targetFilled = true;
             Message = $"Đã điền tọa độ của {name} vào các ô, sửa nếu cần rồi bấm Di chuyển";
         }
 
@@ -599,6 +623,73 @@ namespace UI.ViewModels.Device
             if (_camera == null) return;
             _camera.OnImageGrabbed += OnFrame;
             _camera.OnError += OnCameraError;
+            _ = ReadCameraParamsAsync();               // nạp khoảng giá trị và giá trị thật của camera vào thanh trượt
+        }
+
+        // ---------- Camera: chỉnh thông số ảnh / camera khi xem trực tiếp ----------
+
+        /// <summary>Các thông số chỉnh bằng thanh trượt. Tên theo camera GenICam; camera không có thì ô bị khóa.</summary>
+        public ObservableCollection<CameraParamViewModel> CameraParams { get; } = new();
+
+        private CameraParamViewModel? _exposureParam;
+        private CameraParamViewModel? _gainParam;
+
+        private void BuildCameraParams()
+        {
+            _exposureParam = new CameraParamViewModel("ExposureTime", "Phơi sáng", "µs",
+                v => _camera?.SetNumericParam("ExposureTime", v, integer: false, "Phơi sáng") ?? false);
+            _gainParam = new CameraParamViewModel("Gain", "Gain", "",
+                v => _camera?.SetNumericParam("Gain", v, integer: false, "Gain") ?? false);
+
+            CameraParams.Add(_exposureParam);
+            CameraParams.Add(_gainParam);
+            CameraParams.Add(new CameraParamViewModel("Gamma", "Gamma", "",
+                v => _camera?.SetNumericParam("Gamma", v, integer: true, "Gamma") ?? false));
+            CameraParams.Add(new CameraParamViewModel("Contrast", "Tương phản", "",
+                v => _camera?.SetNumericParam("Contrast", v, integer: true, "Tương phản") ?? false));
+            CameraParams.Add(new CameraParamViewModel("AcquisitionFrameRate", "Tốc độ khung hình", "fps",
+                v => _camera?.SetFrameRate(v) ?? false));
+        }
+
+        /// <summary>Đọc lại khoảng giá trị và giá trị hiện tại của từng thông số từ camera.</summary>
+        [RelayCommand]
+        private async Task ReadCameraParamsAsync()
+        {
+            var camera = _camera;
+            if (camera == null || !camera.IsConnected) { Message = "Chưa kết nối camera"; return; }
+
+            var items = CameraParams.ToList();
+            var results = await Task.Run(() => items.Select(p =>
+            {
+                bool ok = camera.TryReadNumericParam(p.HalconName, out double current, out double min, out double max);
+                return (Param: p, Ok: ok, Current: current, Min: min, Max: max);
+            }).ToList());
+
+            foreach (var r in results) r.Param.Load(r.Ok, r.Current, r.Min, r.Max);
+
+            int count = results.Count(r => r.Ok);
+            Message = count == 0
+                ? "Camera không trả về khoảng giá trị của thông số nào"
+                : $"Đọc được {count}/{results.Count} thông số của camera";
+        }
+
+        /// <summary>Ghi Phơi sáng và Gain hiện tại vào cấu hình thiết bị (áp dụng mỗi lần nối). Gamma, Tương phản, FPS chỉ chỉnh tạm.</summary>
+        [RelayCommand]
+        private void SaveCameraParamsToConfig()
+        {
+            int saved = 0;
+            foreach (var (param, key) in new[] { (_exposureParam, "Exposure"), (_gainParam, "Gain") })
+            {
+                if (param is not { IsSupported: true }) continue;
+                var field = Fields.FirstOrDefault(f => f.Def.Key == key);
+                if (field == null) continue;
+                field.Text = param.Value.ToString("0.###", CultureInfo.InvariantCulture);
+                saved++;
+            }
+
+            Message = saved == 0
+                ? "Chưa có giá trị để ghi (camera chưa kết nối hoặc không báo khoảng giá trị)"
+                : "Đã ghi Phơi sáng và Gain vào cấu hình. Nhớ bấm Lưu cấu hình để giữ lại.";
         }
 
         private void DetachCamera()
@@ -612,6 +703,7 @@ namespace UI.ViewModels.Device
             }
             SetLive(false);
             ClearPreview();
+            RunOnUi(() => { foreach (var p in CameraParams) p.Load(false, 0, 0, 0); });
         }
 
         private void SetLive(bool live)

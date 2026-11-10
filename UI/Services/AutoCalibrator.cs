@@ -261,6 +261,15 @@ namespace UI.Services
         private static async Task<Arrival> GoAndSettleAsync(
             IRobotDriver robot, RobotPoint target, AutoCalibrationPlan plan, CancellationToken ct)
         {
+            // MVS (đường thẳng) bắt buộc cờ tư thế điểm đầu và điểm cuối GIỐNG NHAU, nếu không robot báo lỗi 2810
+            // "Posture flag is disagree" và treo lỗi. Kiểm tra trước để báo rõ, không gửi lệnh sai.
+            var before = await robot.GetCurrentPointAsync(ct);
+            if (before.Ok && (before.Point.Flag1 != target.Flag1 || before.Point.Flag2 != target.Flag2))
+                return new Arrival(default,
+                    $"Cờ tư thế của robot hiện tại ({before.Point.Flag1},{before.Point.Flag2}) khác cờ của điểm đích ({target.Flag1},{target.Flag2}). " +
+                    "Lệnh đi thẳng cần hai cờ giống nhau (lỗi 2810). Đưa robot về đúng tư thế của điểm tâm rồi chạy lại, " +
+                    "hoặc để trống ô 'Điểm tâm' để dùng vị trí hiện tại làm tâm. KHÔNG gửi lệnh.");
+
             var move = await robot.MoveToAsync(target, linear: true, enforceDistanceLimit: true, ct);
             if (!move.Accepted) return new Arrival(default, $"Robot không nhận lệnh di chuyển: {move.Error}");
 

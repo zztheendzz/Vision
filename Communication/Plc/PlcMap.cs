@@ -14,7 +14,8 @@ namespace Communication.Plc
         Bit,
         /// <summary>Một thanh ghi 16 bit.</summary>
         Word,
-        /// <summary>Hai thanh ghi liên tiếp ghép thành số 32 bit.</summary>
+        /// <summary>Hai thanh ghi liên 
+        /// ghép thành số 32 bit.</summary>
         DWord
     }
 

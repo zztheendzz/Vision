@@ -205,7 +205,7 @@
                                                             </WrapPanel>
 
                                                             <!-- Nhích thủ công -->
-                                                            <TextBlock Text="Nhích bằng mũi tên (X, Y, Z, Rz)" FontWeight="SemiBold" Margin="0,18,0,6"
+                                                            <TextBlock Text="Nhích bằng mũi tên (X, Y, Z, xoay Rz)" FontWeight="SemiBold" Margin="0,18,0,6"
                                                                        Foreground="{StaticResource VsAccentBrush}" />
                                                             <WrapPanel VerticalAlignment="Center">
                                                                 <TextBlock Text="Bước (mm)" VerticalAlignment="Center" Margin="0,0,6,0"
@@ -267,13 +267,13 @@
                                                                             <RowDefinition Height="Auto" />
                                                                         </Grid.RowDefinitions>
                                                                         <Button Grid.Row="0" Grid.Column="0" Content="▲" Width="56" Height="42" FontSize="18"
-                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z + (lên)"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z+" />
+                                                                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z + (lên)"
+                                                                                IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z+" />
                                                                         <TextBlock Grid.Row="1" Text="Z" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                                    Foreground="{StaticResource VsMutedBrush}" />
                                                                         <Button Grid.Row="2" Grid.Column="0" Content="▼" Width="56" Height="42" FontSize="18"
-                                                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z − (xuống)"
-                                                                        IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z-" />
+                                                                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z − (xuống)"
+                                                                                IsEnabled="{Binding IsConnected}" Command="{Binding JogCommand}" CommandParameter="Z-" />
                                                                     </Grid>
                                                                     <TextBlock Text="Z+ lên / Z− xuống" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
                                                                                Foreground="{StaticResource VsMutedBrush}" />
@@ -297,7 +297,7 @@
                                                                                Foreground="{StaticResource VsMutedBrush}" />
                                                                 </StackPanel>
                                                             </StackPanel>
-                                                            <TextBlock Text="Chiều mũi tên theo hệ trục gốc của robot (X+, Y+, Z+ lên); đổi bước và tốc độ ở trên."
+                                                            <TextBlock Text="Chiều mũi tên theo hệ trục gốc của robot (Z+ lên); đổi bước và tốc độ ở trên."
                                                                        Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,6,0,0" />
 
                                                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -333,7 +333,7 @@
                                                                 <Button Content="Di chuyển" Style="{StaticResource AccentButton}"
                                                                         IsEnabled="{Binding IsConnected}" Command="{Binding MoveToCoordinatesCommand}" />
                                                             </WrapPanel>
-                                                            <TextBlock Text="X, Y, Z tính bằng mm; A, B, C bằng độ; hệ gốc robot. Cần chiếm quyền và bật servo."
+                                                            <TextBlock Text="X, Y, Z tính bằng mm; A, B, C bằng độ; hệ gốc robot. Cần chiếm quyền và bật servo." TextWrapping="Wrap"
                                                                        Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,4,0,0" />
 
                                                             <!-- Gửi thử độ lệch theo cách đã chọn ở tab Thông số -->
@@ -435,6 +435,47 @@
                                                                             IsEnabled="{Binding IsConnected}"
                                                                             Command="{Binding SnapCommand}" />
                                                                 </StackPanel>
+                                                                <!-- Thông số ảnh / camera: chỉnh khi đang xem -->
+                                                                <StackPanel Margin="0,10,0,0" IsEnabled="{Binding IsConnected}">
+                                                                    <TextBlock Text="Thông số ảnh và camera (chỉnh khi đang xem)" FontWeight="SemiBold"
+                                                                               Foreground="{StaticResource VsAccentBrush}" Margin="0,0,0,4" />
+                                                                    <ItemsControl ItemsSource="{Binding CameraParams}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <Grid Margin="0,2">
+                                                                                    <Grid.ColumnDefinitions>
+                                                                                        <ColumnDefinition Width="150" />
+                                                                                        <ColumnDefinition Width="*" />
+                                                                                        <ColumnDefinition Width="90" />
+                                                                                        <ColumnDefinition Width="40" />
+                                                                                    </Grid.ColumnDefinitions>
+                                                                                    <Grid.RowDefinitions>
+                                                                                        <RowDefinition Height="Auto" />
+                                                                                        <RowDefinition Height="Auto" />
+                                                                                    </Grid.RowDefinitions>
+                                                                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                                                                    <Slider Grid.Column="1" Margin="6,0" VerticalAlignment="Center"
+                                                                                            IsEnabled="{Binding IsSupported}"
+                                                                                            Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                                                                            Value="{Binding Value, Mode=TwoWay}" />
+                                                                                    <TextBox Grid.Column="2" IsEnabled="{Binding IsSupported}"
+                                                                                             Text="{Binding Value, StringFormat=0.##, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                                                                                    <TextBlock Grid.Column="3" Text="{Binding Unit}" Margin="6,0,0,0"
+                                                                                               VerticalAlignment="Center" Foreground="{StaticResource VsMutedBrush}" />
+                                                                                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Status}"
+                                                                                               Margin="6,0,0,0" Foreground="{StaticResource VsMutedBrush}" />
+                                                                                </Grid>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                                        <Button Content="Đọc lại từ camera" Style="{StaticResource OutlineButton}"
+                                                                                Command="{Binding ReadCameraParamsCommand}" />
+                                                                        <Button Content="Lưu Phơi sáng và Gain vào cấu hình" Style="{StaticResource OutlineButton}"
+                                                                                Command="{Binding SaveCameraParamsToConfigCommand}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+
                                                                 <local:ImageViewerPanel Title="Xem trước camera"
                                                                                         Display="{Binding Preview}"
                                                                                         Height="340" Margin="0,8,0,0" />
