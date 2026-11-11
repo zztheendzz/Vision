@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="HslCommunication" Version="7.0.1" />
     <PackageReference Include="Melfa.Robot" Version="0.1.22.6" />
+    <PackageReference Include="xunit" Version="2.9.3" />
   </ItemGroup>
 
   <ItemGroup>

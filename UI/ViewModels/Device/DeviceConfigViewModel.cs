@@ -134,6 +134,20 @@ namespace UI.ViewModels.Device
             }
         }
 
+        /// <summary>Lưu cấu hình không hiện hộp thoại. Trả về false nếu còn lỗi hoặc không ghi được file.</summary>
+        internal bool TrySaveQuietly()
+        {
+            try
+            {
+                if (_catalog.Validate().Count > 0) return false;
+                _store.Save(_catalog);
+                IsDirty = false;
+                StatusMessage = $"Đã lưu lúc {DateTime.Now:HH:mm:ss}";
+                return true;
+            }
+            catch { return false; }
+        }
+
         [RelayCommand]
         private async Task ConnectAllAsync()
         {

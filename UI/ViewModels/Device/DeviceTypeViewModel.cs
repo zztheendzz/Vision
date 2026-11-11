@@ -27,6 +27,13 @@ namespace UI.ViewModels.Device
         public bool HasGroupFields => GroupFields.Count > 0;
         public bool IsFixture => Schema.Type == DeviceType.Fixture;
 
+        /// <summary>Cài đặt chung, không kể các ô lệnh / kết quả của khuôn test (hai ô đó có bảng riêng).</summary>
+        public IReadOnlyList<FieldViewModel> CommonFields { get; }
+        /// <summary>Khuôn test: bảng lệnh OPEN / CLOSE / OPEN ALL / CLOSE ALL / CHECKSENSOR / STATE.</summary>
+        public IReadOnlyList<FixtureCommandRow> CommandRows { get; } = Array.Empty<FixtureCommandRow>();
+        /// <summary>Khuôn test: bảng kết quả slot BUSY / EMPTY / PASS / REPAIR / FAIL / NAN / ERROR.</summary>
+        public IReadOnlyList<FixtureResultRow> ResultRows { get; } = Array.Empty<FixtureResultRow>();
+
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RemoveDeviceCommand))]
         private DeviceViewModel? _selectedDevice;
@@ -51,6 +58,20 @@ namespace UI.ViewModels.Device
                     },
                     k => catalog.GetGroupValue(schema.Type, k)))
                 .ToList();
+
+            CommonFields = GroupFields.Where(f => !f.Def.Key.StartsWith("Cmd.") && !f.Def.Key.StartsWith("Res.")).ToList();
+
+            if (schema.Type == DeviceType.Fixture)
+            {
+                FieldViewModel? Find(string key) => GroupFields.FirstOrDefault(f => f.Def.Key == key);
+
+                CommandRows = DeviceSchemas.FixtureCommands
+                    .Select(c => new FixtureCommandRow(c.Title, Find($"Cmd.{c.Key}.Send")!, Find($"Cmd.{c.Key}.Ok")!, Find($"Cmd.{c.Key}.Err")!))
+                    .ToList();
+                ResultRows = DeviceSchemas.FixtureResults
+                    .Select(r => new FixtureResultRow(r.Title, Find($"Res.{r.Key}.Pattern"), Find($"Res.{r.Key}.Plc")))
+                    .ToList();
+            }
         }
 
         [RelayCommand]
@@ -78,6 +99,21 @@ namespace UI.ViewModels.Device
         }
 
         private bool HasSelection() => SelectedDevice != null;
+
+        [RelayCommand] private Task OpenAllAsync() => RunAllAsync(Communication.Fixtures.FixtureCommand.OpenAll);
+        [RelayCommand] private Task CloseAllAsync() => RunAllAsync(Communication.Fixtures.FixtureCommand.CloseAll);
+
+        // OPEN ALL / CLOSE ALL không có số khuôn: gửi qua khuôn đang chọn (nếu đã nối), không thì khuôn đã nối đầu tiên
+        private Task RunAllAsync(Communication.Fixtures.FixtureCommand command)
+        {
+            var target = SelectedDevice is { IsConnected: true } ? SelectedDevice : Devices.FirstOrDefault(d => d.IsConnected);
+            if (target == null)
+            {
+                _owner.StatusMessage = "Chưa có khuôn nào kết nối để gửi lệnh";
+                return Task.CompletedTask;
+            }
+            return target.RunFixtureCommandAsync(command);
+        }
 
         /// <summary>Hiện địa chỉ IPv4 của máy này (khuôn test cần gửi về đúng địa chỉ và "Cổng nhận").</summary>
         [RelayCommand]

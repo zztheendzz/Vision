@@ -11,6 +11,21 @@ namespace UI.ViewModels.ToolboxAndParam
     {
         private string _selected;
 
+        // Giải thích ngắn từng lựa chọn, khóa "KiểuEnum.GiáTrị". Enum không có trong bảng thì không hiện gì.
+        private static readonly Dictionary<string, string> HelpTexts = new()
+        {
+            ["OffsetConvention.AboutRobotOrigin"] = "Robot xoay điểm gắp đã dạy quanh GỐC robot rồi dịch (Dx, Dy). Không cần nhập điểm dạy.",
+            ["OffsetConvention.AboutReferencePoint"] = "Robot xoay điểm gắp đã dạy quanh TÂM MẪU lúc dạy (RefX, RefY) rồi dịch. Robot phải biết tâm mẫu.",
+            ["OffsetConvention.Additive"] = "PLC cộng thẳng Dx, Dy, Drz vào điểm gắp đã dạy. Phải nhập TaughtX / TaughtY / TaughtRz.",
+            ["PlaceOffsetConvention.Additive"] = "Cộng thẳng Dx, Dy, Drz vào điểm đặt đã dạy. Phổ biến nhất, chỉ cần nhập PlaceRz.",
+            ["PlaceOffsetConvention.ToolFrame"] = "Dịch theo hệ tọa độ của tay gắp (tool). Robot phải hỗ trợ lệnh dịch theo tool.",
+            ["PlaceOffsetConvention.AboutRobotOrigin"] = "Xoay điểm đặt quanh GỐC robot rồi dịch (Dx, Dy). Phải nhập PlaceX / PlaceY / PlaceRz.",
+        };
+        private readonly string _enumName;
+
+        /// <summary>Giải thích ngắn lựa chọn đang chọn (rỗng nếu không có).</summary>
+        public string Help => HelpTexts.TryGetValue($"{_enumName}.{_selected}", out var text) ? text : "";
+
         public IReadOnlyList<string> Choices { get; }
 
         public string Selected
@@ -19,12 +34,16 @@ namespace UI.ViewModels.ToolboxAndParam
             set
             {
                 if (value != null && SetProperty(ref _selected, value))
+                {
+                    OnPropertyChanged(nameof(Help));
                     TrySetValue(value);          // ParamDef.Coerce đổi chữ thành enum
+                }
             }
         }
 
         public EnumParameterViewModel(VisionNode node, ParamDef definition) : base(node, definition)
         {
+            _enumName = definition.Type.Name;
             Choices = Enum.GetNames(definition.Type);
             _selected = Read();
         }
@@ -32,6 +51,7 @@ namespace UI.ViewModels.ToolboxAndParam
         public override void Reload()
         {
             SetProperty(ref _selected, Read(), nameof(Selected));
+            OnPropertyChanged(nameof(Help));
             ErrorMessage = "";
         }
 

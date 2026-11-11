@@ -2,6 +2,7 @@
 using Communication.Configuration;
 using Communication.Devices;
 using Communication.Drivers;
+using Communication.Fixtures;
 using Communication.Transport;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,6 +10,7 @@ using HalconDotNet;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Controls;
+using UI.Models;
 using UI.ViewModels.RunAndDisplay;
 using Vision.Graph;
 
@@ -26,6 +28,9 @@ namespace UI.ViewModels.Device
         public DeviceConfig Config { get; }
 
         public IReadOnlyList<FieldViewModel> Fields { get; }
+
+        /// <summary>Tra ô theo khóa, để bảng khuôn test gắn từng cột: FieldMap[Ip].Text.</summary>
+        public Dictionary<string, FieldViewModel> FieldMap { get; } = new();
 
         public DeviceViewModel(DeviceConfig config, DeviceCatalog catalog, DeviceConfigViewModel owner)
         {
@@ -45,10 +50,14 @@ namespace UI.ViewModels.Device
                         OnPropertyChanged(nameof(Summary));
                         OnPropertyChanged(nameof(CanConnect));
                         OnPropertyChanged(nameof(IsSimulatedPlc));
+                        if (Config.Type == DeviceType.Fixture) RebuildSlots();
                         _owner.MarkDirty();
                     },
                     config.GetString))
                 .ToList();
+
+            foreach (var f in Fields) FieldMap[f.Def.Key] = f;
+            if (Config.Type == DeviceType.Fixture) RebuildSlots();
 
             if (IsCamera) BuildCameraParams();
         }
@@ -626,6 +635,114 @@ namespace UI.ViewModels.Device
             _ = ReadCameraParamsAsync();               // nạp khoảng giá trị và giá trị thật của camera vào thanh trượt
         }
 
+        // ---------- Khuôn test: slot và lệnh điều khiển ----------
+
+        /// <summary>Các slot của khuôn, tạo theo ô "Số slot" trong cấu hình.</summary>
+        public ObservableCollection<SlotViewModel> Slots { get; } = new();
+
+        [ObservableProperty] private string _fixtureStateText = "Chưa rõ";
+        [ObservableProperty] private string _sensorText = "Chưa kiểm";
+        [ObservableProperty] private bool _fixtureBusy;
+
+        /// <summary>Số khuôn dùng trong lệnh (SS).</summary>
+        public int FixtureNo => Config.GetInt("FixtureNo", 1);
+
+        private void RebuildSlots()
+        {
+            OnPropertyChanged(nameof(FixtureNo));
+            int count = Math.Clamp(Config.GetInt("Slots", 1), 1, 64);
+            if (Slots.Count == count) return;
+
+            // Giữ trạng thái các slot còn lại khi đổi số slot
+            while (Slots.Count > count) Slots.RemoveAt(Slots.Count - 1);
+            while (Slots.Count < count) Slots.Add(new SlotViewModel(Slots.Count + 1));
+        }
+
+        private FixtureProtocol Protocol => new(k => _catalog.GetGroupValue(DeviceType.Fixture, k));
+
+        [RelayCommand] private Task FixtureOpenAsync() => RunFixtureCommandAsync(FixtureCommand.Open);
+        [RelayCommand] private Task FixtureCloseAsync() => RunFixtureCommandAsync(FixtureCommand.Close);
+        [RelayCommand] private Task FixtureCheckSensorAsync() => RunFixtureCommandAsync(FixtureCommand.CheckSensor);
+        [RelayCommand] private Task FixtureStateAsync() => RunFixtureCommandAsync(FixtureCommand.State);
+
+        /// <summary>Gửi một lệnh tới khuôn, chờ trả lời một dòng rồi cập nhật trạng thái hiển thị.</summary>
+        public async Task RunFixtureCommandAsync(FixtureCommand command)
+        {
+            if (_owner.Manager.GetLink(Id) is not ITransport transport || !transport.IsConnected)
+            {
+                Message = "Chưa kết nối khuôn này";
+                return;
+            }
+            if (FixtureBusy) return;
+
+            FixtureBusy = true;
+            try
+            {
+                var protocol = Protocol;
+                int ss = FixtureNo;
+                string text = protocol.BuildCommand(command, ss);
+                Message = $"Gửi: {text}";
+
+                string reply = await transport.RequestAsync(text, 5000);
+                ApplyFixtureReply(command, reply, ss, protocol);
+            }
+            catch (Exception ex)
+            {
+                Message = "Lỗi: " + ex.Message;
+            }
+            finally { FixtureBusy = false; }
+        }
+
+        private void ApplyFixtureReply(FixtureCommand command, string reply, int ss, FixtureProtocol protocol)
+        {
+            var r = protocol.Interpret(command, reply, ss);
+            if (!r.Matched)
+            {
+                // Có thể là dòng kết quả slot trả về thay cho trả lời lệnh
+                if (!ApplyLine(reply)) Message = $"Trả lời không khớp mẫu nào: {reply}";
+                else Message = $"Nhận: {reply}";
+                return;
+            }
+
+            switch (command)
+            {
+                case FixtureCommand.Open:
+                case FixtureCommand.OpenAll:
+                    if (r.Positive) FixtureStateText = "Đang mở";
+                    break;
+                case FixtureCommand.Close:
+                case FixtureCommand.CloseAll:
+                    if (r.Positive) FixtureStateText = "Đang đóng";
+                    break;
+                case FixtureCommand.CheckSensor:
+                    SensorText = r.Positive ? "Có hàng" : "Không có hàng";
+                    break;
+                case FixtureCommand.State:
+                    FixtureStateText = r.Positive ? "Đang mở" : "Đang đóng";
+                    break;
+            }
+
+            string verdict = r.Positive ? "OK" : "LỖI";
+            Message = r.Slots.Length > 0 ? $"{command}: {verdict} (slot: {r.Slots})" : $"{command}: {verdict} ({reply})";
+        }
+
+        /// <summary>
+        /// Đọc một dòng kết quả slot (ví dụ P_01_02) và cập nhật slot tương ứng nếu đúng số khuôn này.
+        /// Trả về true nếu dòng khớp một mẫu kết quả.
+        /// </summary>
+        public bool ApplyLine(string line)
+        {
+            if (!Protocol.TryParseSlotResult(line, out int ss, out int nn, out var state)) return false;
+            if (ss != FixtureNo) return false;
+
+            RunOnUi(() =>
+            {
+                var slot = Slots.FirstOrDefault(x => x.Number == nn);
+                if (slot != null) slot.State = state;
+            });
+            return true;
+        }
+
         // ---------- Camera: chỉnh thông số ảnh / camera khi xem trực tiếp ----------
 
         /// <summary>Các thông số chỉnh bằng thanh trượt. Tên theo camera GenICam; camera không có thì ô bị khóa.</summary>
@@ -640,15 +757,28 @@ namespace UI.ViewModels.Device
                 v => _camera?.SetNumericParam("ExposureTime", v, integer: false, "Phơi sáng") ?? false);
             _gainParam = new CameraParamViewModel("Gain", "Gain", "",
                 v => _camera?.SetNumericParam("Gain", v, integer: false, "Gain") ?? false);
+            var gamma = new CameraParamViewModel("Gamma", "Gamma", "",
+                v => _camera?.SetNumericParam("Gamma", v, integer: true, "Gamma") ?? false);
+            var contrast = new CameraParamViewModel("Contrast", "Tương phản", "",
+                v => _camera?.SetNumericParam("Contrast", v, integer: true, "Tương phản") ?? false);
+            var fps = new CameraParamViewModel("AcquisitionFrameRate", "Tốc độ khung hình", "fps",
+                v => _camera?.SetFrameRate(v) ?? false);
 
-            CameraParams.Add(_exposureParam);
-            CameraParams.Add(_gainParam);
-            CameraParams.Add(new CameraParamViewModel("Gamma", "Gamma", "",
-                v => _camera?.SetNumericParam("Gamma", v, integer: true, "Gamma") ?? false));
-            CameraParams.Add(new CameraParamViewModel("Contrast", "Tương phản", "",
-                v => _camera?.SetNumericParam("Contrast", v, integer: true, "Tương phản") ?? false));
-            CameraParams.Add(new CameraParamViewModel("AcquisitionFrameRate", "Tốc độ khung hình", "fps",
-                v => _camera?.SetFrameRate(v) ?? false));
+            // Mỗi lần chỉnh xong thì ghi vào cấu hình và lưu luôn, để mở lại app vẫn còn
+            foreach (var (param, key) in new[] { (_exposureParam, "Exposure"), (_gainParam, "Gain"), (gamma, "CamGamma"), (contrast, "CamContrast"), (fps, "CamFrameRate") })
+            {
+                CameraParams.Add(param);
+                string k = key;
+                param.Applied += v => PersistCameraParam(k, v);
+            }
+        }
+
+        private void PersistCameraParam(string key, double value)
+        {
+            var field = Fields.FirstOrDefault(f => f.Def.Key == key);
+            if (field == null) return;
+            field.Text = value.ToString("0.###", CultureInfo.InvariantCulture);   // đánh dấu đã sửa
+            _owner.TrySaveQuietly();
         }
 
         /// <summary>Đọc lại khoảng giá trị và giá trị hiện tại của từng thông số từ camera.</summary>
@@ -673,23 +803,26 @@ namespace UI.ViewModels.Device
                 : $"Đọc được {count}/{results.Count} thông số của camera";
         }
 
-        /// <summary>Ghi Phơi sáng và Gain hiện tại vào cấu hình thiết bị (áp dụng mỗi lần nối). Gamma, Tương phản, FPS chỉ chỉnh tạm.</summary>
+        /// <summary>Ghi cả 5 thông số hiện tại vào cấu hình rồi lưu (thanh trượt cũng tự ghi mỗi lần chỉnh).</summary>
         [RelayCommand]
         private void SaveCameraParamsToConfig()
         {
             int saved = 0;
-            foreach (var (param, key) in new[] { (_exposureParam, "Exposure"), (_gainParam, "Gain") })
+            var keys = new[] { "Exposure", "Gain", "CamGamma", "CamContrast", "CamFrameRate" };
+            for (int i = 0; i < CameraParams.Count && i < keys.Length; i++)
             {
-                if (param is not { IsSupported: true }) continue;
-                var field = Fields.FirstOrDefault(f => f.Def.Key == key);
+                var param = CameraParams[i];
+                if (!param.IsSupported) continue;
+                var field = Fields.FirstOrDefault(f => f.Def.Key == keys[i]);
                 if (field == null) continue;
                 field.Text = param.Value.ToString("0.###", CultureInfo.InvariantCulture);
                 saved++;
             }
 
-            Message = saved == 0
-                ? "Chưa có giá trị để ghi (camera chưa kết nối hoặc không báo khoảng giá trị)"
-                : "Đã ghi Phơi sáng và Gain vào cấu hình. Nhớ bấm Lưu cấu hình để giữ lại.";
+            if (saved == 0) { Message = "Chưa có giá trị để ghi (camera chưa kết nối hoặc không báo khoảng giá trị)"; return; }
+            Message = _owner.TrySaveQuietly()
+                ? $"Đã lưu {saved} thông số camera vào cấu hình"
+                : "Đã ghi vào cấu hình nhưng chưa lưu được (còn ô cấu hình sai). Bấm Lưu cấu hình sau khi sửa.";
         }
 
         private void DetachCamera()

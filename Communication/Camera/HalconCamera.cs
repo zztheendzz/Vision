@@ -62,8 +62,15 @@ namespace Communication.Camera
         {
             ExposureUs = d.GetDouble("Exposure", 5000),
             Gain = d.GetDouble("Gain", 0),
-            TriggerMode = d.GetString("Trigger")
+            TriggerMode = d.GetString("Trigger"),
+            GammaRaw = ParseOptional(d.GetString("CamGamma")),
+            ContrastRaw = ParseOptional(d.GetString("CamContrast")),
+            FrameRate = ParseOptional(d.GetString("CamFrameRate"))
         };
+
+        private static double? ParseOptional(string? text)
+            => double.TryParse(text?.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v)
+               && double.IsFinite(v) ? v : null;
 
         public HalconCamera(string deviceId) { DeviceId = string.IsNullOrWhiteSpace(deviceId) ? "default" : deviceId; }
 
@@ -72,6 +79,10 @@ namespace Communication.Camera
         /// <summary>Cấu hình áp dụng ngay sau khi nối (lấy từ ô nhập trong màn hình cấu hình).</summary>
         public double? ExposureUs { get; set; }
         public double? Gain { get; set; }
+        /// <summary>Gamma, Contrast (số gốc của camera) và FPS đã lưu từ thanh trượt; null = không đặt khi nối.</summary>
+        public double? GammaRaw { get; set; }
+        public double? ContrastRaw { get; set; }
+        public double? FrameRate { get; set; }
         /// <summary>"Liên tục" (TriggerMode Off, camera đã chạy ổn ở dự án cũ), "Software" hoặc "Hardware".</summary>
         public string TriggerMode { get; set; } = "Liên tục";
         public string HardwareLine { get; set; } = "Line0";
@@ -93,6 +104,9 @@ namespace Communication.Camera
             var warn = new List<string>();
             if (ExposureUs is double e && !SetExposureTime(e)) warn.Add("Exposure");
             if (Gain is double g && g >= 1 && !SetGain(g)) warn.Add("Gain");
+            if (GammaRaw is double gm && !SetNumericParam("Gamma", gm, integer: true, "Gamma")) warn.Add("Gamma");
+            if (ContrastRaw is double ct && !SetNumericParam("Contrast", ct, integer: true, "Tương phản")) warn.Add("Tương phản");
+            if (FrameRate is double fr && fr > 0 && !SetFrameRate(fr)) warn.Add("FPS");
 
             bool useTrigger = TriggerMode != "Liên tục";
             if (!ConfigureTrigger(useTrigger, TriggerMode != "Hardware", HardwareLine)) warn.Add("Trigger: " + LastError);

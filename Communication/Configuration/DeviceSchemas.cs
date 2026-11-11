@@ -64,6 +64,48 @@ namespace Communication.Configuration
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
         private static FieldDef Int(string key, string label, int def, double min, double max, string section = "", string hint = "")
             => new(key, label, FieldKind.Integer, def.ToString(), section, Min: min, Max: max, Hint: hint);
+        /// <summary>Các lệnh gửi khuôn test: khóa, tên hiển thị, mẫu gửi, mẫu trả lời 1 (OK/YES/OPENED), mẫu trả lời 2 (ERROR/NO/CLOSED).</summary>
+        public static readonly (string Key, string Title, string Send, string Ok, string Err)[] FixtureCommands =
+        {
+            ("Open",        "OPEN – mở khuôn",           "OPEN_{SS}",        "OPEN_{SS}_OK",  "OPEN_{SS}_ERROR"),
+            ("Close",       "CLOSE – đóng khuôn",        "CLOSE_{SS}",       "CLOSE_{SS}_OK", "CLOSE_{SS}_ERROR"),
+            ("OpenAll",     "OPEN ALL – mở tất cả",      "OPEN_ALL",         "OPEN_ALL_OK",   "OPEN_ALL_ERROR_{SLOTS}"),
+            ("CloseAll",    "CLOSE ALL – đóng tất cả",   "CLOSE_ALL",        "CLOSE_ALL_OK",  "CLOSE_ALL_ERROR_{SLOTS}"),
+            ("CheckSensor", "CHECKSENSOR – kiểm cảm biến", "CHECKSENSOR_{SS}", "YES_{SS}",      "NO_{SS}"),
+            ("State",       "STATE – trạng thái khuôn",  "STATE_{SS}",       "OPENED_{SS}",   "CLOSED_{SS}"),
+        };
+
+        /// <summary>Kết quả slot: khóa, tên, mẫu nhận về (null = không có), mã gửi PLC (null = không gửi).</summary>
+        public static readonly (string Key, string Title, string? Pattern, int? Plc)[] FixtureResults =
+        {
+            ("Busy",   "BUSY",   "B_{NN}_{SS}", 0),
+            ("Empty",  "EMPTY",  null,          1),
+            ("Pass",   "PASS",   "P_{NN}_{SS}", 2),
+            ("Repair", "REPAIR", "R_{NN}_{SS}", 3),
+            ("Fail",   "FAIL",   "F_{NN}_{SS}", 4),
+            ("Nan",    "NAN",    "I_{NN}_{SS}", 5),
+            ("Error",  "ERROR",  "E_{NN}_{SS}", null),
+        };
+
+        /// <summary>
+        /// Cài đặt chung của khuôn test về lệnh và kết quả. {SS} = số khuôn, {NN} = số slot trong khuôn, {SLOTS} = danh sách slot lỗi.
+        /// Khóa dạng "Cmd.Open.Send" và "Res.Pass.Pattern"; giao diện gom các khóa này thành hai bảng riêng.
+        /// </summary>
+        private static IEnumerable<FieldDef> FixtureProtocolFields()
+        {
+            foreach (var c in FixtureCommands)
+            {
+                yield return Txt($"Cmd.{c.Key}.Send", $"{c.Title} – lệnh gửi", c.Send, "Lệnh");
+                yield return Txt($"Cmd.{c.Key}.Ok", $"{c.Title} – trả lời 1", c.Ok, "Lệnh");
+                yield return Txt($"Cmd.{c.Key}.Err", $"{c.Title} – trả lời 2", c.Err, "Lệnh");
+            }
+            foreach (var r in FixtureResults)
+            {
+                if (r.Pattern != null) yield return Txt($"Res.{r.Key}.Pattern", $"{r.Title} – mẫu nhận về", r.Pattern, "Kết quả");
+                if (r.Plc != null) yield return Int($"Res.{r.Key}.Plc", $"{r.Title} – mã gửi PLC", r.Plc.Value, 0, 255, "Kết quả");
+            }
+        }
+
         private static FieldDef Num(string key, string label, string def, double min, double max, string section = "", string hint = "")
             => new(key, label, FieldKind.Number, def, section, Min: min, Max: max, Hint: hint);
         private static FieldDef Bool(string key, string label, bool def, string section = "", string hint = "")
@@ -101,6 +143,10 @@ namespace Communication.Configuration
                     Num("DarkLevel", "Vùng tối", "0", 0, 4095, "Tinh chỉnh"),
                     Num("Gain", "Gain", "0", 0, 100, "Tinh chỉnh"),
                     Num("Gamma", "Gamma", "1", 0.1, 4, "Tinh chỉnh"),
+                    // Thông số camera chỉnh bằng thanh trượt ở màn xem trực tiếp; để trống = không đặt khi nối
+                    Txt("CamGamma", "Gamma camera (thanh trượt)", "", "Tinh chỉnh", "Số gốc của camera; trống = không đặt"),
+                    Txt("CamContrast", "Tương phản camera (thanh trượt)", "", "Tinh chỉnh", "Số gốc của camera; trống = không đặt"),
+                    Txt("CamFrameRate", "Tốc độ khung hình (fps)", "", "Tinh chỉnh", "Trống = không đặt"),
                 }
             },
             new()
@@ -222,11 +268,12 @@ namespace Communication.Configuration
                     Term(KeyTx, "Ký tự kết thúc TX"),
                     Term(KeyRx, "Ký tự kết thúc RX"),
                     Int("ListenPort", "Cổng nhận", 5002, 1, 65535, "Chung"),
-                },
+                }.Concat(FixtureProtocolFields()).ToArray(),
                 DeviceFields = new[]
                 {
                     Ip(KeyIp, "IP", "10.153.66.83"),
                     Int(KeyPort, "Cổng", 9999, 1, 65535, "Kết nối"),
+                    Int("FixtureNo", "Số khuôn (SS)", 1, 1, 99, "Kết nối", "Số khuôn dùng trong lệnh: khuôn 1 → OPEN_01"),
                     Addr("ResultReg", "Thanh ghi kết quả", "D1001"),
                     Int("Slots", "Số slot", 1, 1, 64, "Kết nối"),
                     Int("TestTimeoutS", "Timeout test (giây)", 100, 1, 36000, "Thời gian"),

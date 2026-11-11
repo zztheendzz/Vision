@@ -25,6 +25,9 @@ namespace UI.ViewModels.Device
             _apply = apply;
         }
 
+        /// <summary>Báo sau khi camera nhận giá trị mới thành công (để ghi vào cấu hình).</summary>
+        public event Action<double>? Applied;
+
         /// <summary>Tên tham số theo camera / HALCON (ExposureTime, Gain...).</summary>
         public string HalconName { get; }
         public string Label { get; }
@@ -70,7 +73,9 @@ namespace UI.ViewModels.Device
             {
                 await Task.Delay(200, ct);                                    // chờ người dùng ngừng kéo
                 bool ok = await Task.Run(() => _apply(value), ct);            // không chặn giao diện
-                if (!ct.IsCancellationRequested) Status = ok ? "" : "camera từ chối giá trị này";
+                if (ct.IsCancellationRequested) return;
+                Status = ok ? "" : "camera từ chối giá trị này";
+                if (ok) Applied?.Invoke(value);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { Status = ex.Message; }

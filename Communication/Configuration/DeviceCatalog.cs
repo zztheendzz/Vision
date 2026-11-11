@@ -58,6 +58,14 @@ namespace Communication.Configuration
                 Enabled = schema.DefaultEnabled,
                 SourcePlcId = schema.HasPlcSource ? Devices.FirstOrDefault(d => d.Type == DeviceType.PLC)?.Id : null
             };
+            if (type == DeviceType.Fixture)
+            {
+                // Số khuôn nhỏ nhất chưa ai dùng
+                var used = Devices.Where(d => d.Type == DeviceType.Fixture).Select(d => d.GetInt("FixtureNo", 1)).ToHashSet();
+                int ss = 1;
+                while (used.Contains(ss)) ss++;
+                device.Set("FixtureNo", ss.ToString());
+            }
             Devices.Add(device);
             return device;
         }
@@ -167,6 +175,10 @@ namespace Communication.Configuration
                     d.GetString(DeviceSchemas.KeyIp).Length == 0)
                     errors.Add($"{d.Name} – chưa nhập địa chỉ IP.");
             }
+
+            foreach (var dup in Devices.Where(d => d.Type == DeviceType.Fixture && d.Values.ContainsKey("FixtureNo"))   // khuôn cũ chưa có số khuôn thì bỏ qua
+                                       .GroupBy(d => d.GetInt("FixtureNo", 1)).Where(g => g.Count() > 1))
+                errors.Add($"Khuôn test trùng số khuôn {dup.Key:00}: {string.Join(", ", dup.Select(d => d.Name))}.");
 
             return errors;
         }
