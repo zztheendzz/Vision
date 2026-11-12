@@ -64,9 +64,11 @@ namespace Communication.Configuration
                     return d < Min || d > Max ? $"{Label}: phải từ {Min:0.##} đến {Max:0.##}." : null;
 
                 case FieldKind.Address:
-                    return value.Length == 0 || AddressPattern.IsMatch(value)
+                    // Cho phép danh sách cách dấu phẩy (khuôn test nhiều slot: D1001, D1002, ...)
+                    return value.Length == 0 ||
+                           value.Split(',', StringSplitOptions.TrimEntries).All(part => AddressPattern.IsMatch(part))
                         ? null
-                        : $"{Label}: địa chỉ phải gồm chữ rồi số, ví dụ M641.";
+                        : $"{Label}: địa chỉ phải gồm chữ rồi số, ví dụ M641 (nhiều địa chỉ thì cách nhau bằng dấu phẩy).";
 
                 case FieldKind.IpAddress:
                     if (value.Length == 0) return null;

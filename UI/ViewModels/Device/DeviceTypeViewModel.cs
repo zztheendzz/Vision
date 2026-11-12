@@ -27,6 +27,14 @@ namespace UI.ViewModels.Device
         public bool HasGroupFields => GroupFields.Count > 0;
         public bool IsFixture => Schema.Type == DeviceType.Fixture;
 
+        /// <summary>Tình trạng cổng nhận (đang nghe hay lý do chưa mở).</summary>
+        public string ListenerStatus => _owner.ListenerStatus;
+
+        /// <summary>Nhật ký gửi/nhận khuôn test (dùng chung cho mọi khuôn).</summary>
+        public ObservableCollection<LogLine> Log => _owner.FixtureLog;
+        public IRelayCommand ClearLogCommand => _owner.ClearFixtureLogCommand;
+        public IRelayCommand CopyLogCommand => _owner.CopyFixtureLogCommand;
+
         /// <summary>Cài đặt chung, không kể các ô lệnh / kết quả của khuôn test (hai ô đó có bảng riêng).</summary>
         public IReadOnlyList<FieldViewModel> CommonFields { get; }
         /// <summary>Khuôn test: bảng lệnh OPEN / CLOSE / OPEN ALL / CLOSE ALL / CHECKSENSOR / STATE.</summary>
@@ -58,6 +66,11 @@ namespace UI.ViewModels.Device
                     },
                     k => catalog.GetGroupValue(schema.Type, k)))
                 .ToList();
+
+            _owner.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DeviceConfigViewModel.ListenerStatus)) OnPropertyChanged(nameof(ListenerStatus));
+            };
 
             CommonFields = GroupFields.Where(f => !f.Def.Key.StartsWith("Cmd.") && !f.Def.Key.StartsWith("Res.")).ToList();
 

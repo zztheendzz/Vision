@@ -59,5 +59,48 @@ namespace Communication.Tests
             Assert.Equal(1, p.PlcCode(SlotState.Empty));
             Assert.Null(p.PlcCode(SlotState.Error));
         }
+
+        [Fact]
+        public void SingleAddressExpandsToConsecutiveSlots()
+        {
+            var a = SlotAddressing.Resolve("D1001", 3, out var warning);
+            Assert.Equal(new[] { "D1001", "D1002", "D1003" }, a);
+            Assert.Null(warning);
+        }
+
+        [Fact]
+        public void ListGivesOneAddressPerSlotAndWarnsWhenShort()
+        {
+            var a = SlotAddressing.Resolve("D1001, D1005", 3, out var warning);
+            Assert.Equal(new string?[] { "D1001", "D1005", null }, a);
+            Assert.NotNull(warning);
+        }
+
+        [Theory]
+        [InlineData("YES_1", 1, true, new[] { true })]            // một slot: bỏ phần sau được
+        [InlineData("YES_1_1", 1, true, new[] { true })]
+        [InlineData("YES_1_1011", 1, true, new[] { true, false, true, true })]
+        [InlineData("YES_1_1_0_1_1", 1, true, new[] { true, false, true, true })]
+        [InlineData("NO_01", 1, false, new[] { false, false, false, false })]
+        public void SensorReplyGivesPerSlotState(string reply, int ss, bool positive, bool[] expected)
+        {
+            var r = Default().InterpretSensor(reply, ss, expected.Length);
+            Assert.True(r.Matched);
+            Assert.Equal(positive, r.Positive);
+            Assert.Equal(expected, r.Slots);
+        }
+
+        [Fact]
+        public void SensorReplyWithWrongSlotCountIsRejectedWithWarning()
+        {
+            var r = Default().InterpretSensor("YES_1_10", 1, 4);
+            Assert.True(r.Matched);
+            Assert.Null(r.Slots);
+            Assert.NotNull(r.Warning);
+        }
+
+        [Fact]
+        public void SensorReplyForOtherFixtureDoesNotMatch()
+            => Assert.False(Default().InterpretSensor("YES_2_1", 1, 1).Matched);
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Communication.Configuration;
 using Communication.Drivers;
+using Communication.Fixtures;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -8,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows.Threading;
 using UI.Services;
+using UI.ViewModels.RunAndDisplay;
 
 namespace UI.ViewModels.Device
 {
@@ -41,6 +43,120 @@ namespace UI.ViewModels.Device
         /// <summary>Riêng các PLC, làm danh sách chọn "PLC nguồn".</summary>
         public ObservableCollection<DeviceViewModel> Plcs { get; } = new();
 
+        /// <summary>Nhật ký gửi/nhận của các khuôn test (giữ tối đa 500 dòng gần nhất).</summary>
+        public ObservableCollection<LogLine> FixtureLog { get; } = new();
+
+        /// <summary>Thêm một dòng vào nhật ký khuôn test (gọi từ luồng nào cũng được).</summary>
+        public void AddFixtureLog(string source, string kind, string text)
+        {
+            var line = new LogLine(DateTime.Now.ToString("HH:mm:ss.fff"), source, kind, text);
+            void Add()
+            {
+                FixtureLog.Add(line);
+                while (FixtureLog.Count > 500) FixtureLog.RemoveAt(0);
+            }
+
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess()) Add();
+            else dispatcher.BeginInvoke(Add);
+        }
+
+        // ---------- Cổng nhận của khuôn test ----------
+
+        /// <summary>Tình trạng cổng nhận, hiện ở tab Khuôn test: đang nghe, hoặc lý do chưa mở.</summary>
+        [ObservableProperty] private string _listenerStatus = "Cổng nhận: chưa kiểm tra";
+
+        private FixtureListener? _listener;
+        private string _listenerKey = "";       // cổng + ký tự kết thúc đang dùng (hoặc đã thử mà lỗi)
+
+        /// <summary>
+        /// Giữ máy chủ nghe "Cổng nhận" đúng với cấu hình: chạy khi có khuôn đang bật ở chế độ TCP Split, tắt khi không còn.
+        /// Gọi định kỳ; đổi cổng hoặc ký tự kết thúc thì tự nghe lại. Cổng bị chiếm chỉ báo lỗi một lần cho tới khi cấu hình đổi.
+        /// </summary>
+        private void SyncFixtureListener()
+        {
+            try { SyncFixtureListenerCore(); }
+            catch (Exception ex) { ListenerStatus = "Cổng nhận: lỗi " + ex.Message; }
+        }
+
+        private void SyncFixtureListenerCore()
+        {
+            string mode = _catalog.GetGroupValue(DeviceType.Fixture, DeviceSchemas.KeyMode);
+            bool anyEnabled = Devices.Any(d => d.Config.Type == DeviceType.Fixture && d.Enabled);
+            bool want = mode == "TCP Split" && anyEnabled;
+
+            string key = "";
+            int port = 0;
+            string term = "";
+            if (want)
+            {
+                term = _catalog.GetGroupValue(DeviceType.Fixture, DeviceSchemas.KeyRx);
+                int.TryParse(_catalog.GetGroupValue(DeviceType.Fixture, "ListenPort"), out port);
+                key = $"{port}|{term}";
+            }
+            else
+            {
+                key = "";
+                ListenerStatus = mode != "TCP Split"
+                    ? $"Cổng nhận: chưa mở (chế độ khuôn test là '{mode}', cần 'TCP Split')"
+                    : "Cổng nhận: chưa mở (chưa có khuôn nào được tick Bật)";
+            }
+
+            if (key == _listenerKey) return;
+
+            _listener?.Dispose();
+            _listener = null;
+            _listenerKey = key;
+            if (!want || port <= 0) return;
+
+            try
+            {
+                var listener = new FixtureListener(port, Escapes.ToBytes(term));
+                listener.LineReceived += (remote, line) => OnFixtureLine(remote, line);
+                listener.Info += text => AddFixtureLog("Cổng nhận", "INFO", text);
+                listener.Start();
+                _listener = listener;
+                ListenerStatus = $"Cổng nhận: đang nghe cổng {port}";
+                AddFixtureLog("Cổng nhận", "INFO", $"Đang nghe cổng {port}");
+            }
+            catch (Exception ex)
+            {
+                ListenerStatus = $"Cổng nhận: KHÔNG nghe được cổng {port} ({ex.Message})";
+                AddFixtureLog("Cổng nhận", "LỖI", $"Không nghe được cổng {port}: {ex.Message}");
+            }
+        }
+
+        /// <summary>Có dòng từ khuôn gửi về: ghi nhật ký và đưa cho khuôn có số khuôn (SS) khớp.</summary>
+        private void OnFixtureLine(string remote, string line)
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            void Handle()
+            {
+                AddFixtureLog("Cổng nhận", "NHẬN", $"{remote}: {line}");
+                bool handled = Devices.Where(d => d.Config.Type == DeviceType.Fixture).Any(d => d.ApplyLine(line));
+                if (!handled) AddFixtureLog("Cổng nhận", "INFO", "Dòng này không khớp mẫu kết quả nào hoặc số khuôn không có trong danh sách");
+            }
+
+            if (dispatcher == null || dispatcher.CheckAccess()) Handle();
+            else dispatcher.BeginInvoke(Handle);
+        }
+
+        [RelayCommand]
+        private void ClearFixtureLog() => FixtureLog.Clear();
+
+        /// <summary>Chép toàn bộ nhật ký vào clipboard.</summary>
+        [RelayCommand]
+        private void CopyFixtureLog()
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(string.Join(Environment.NewLine,
+                    FixtureLog.Select(l => $"{l.Time}  {l.Source}  {l.Kind}  {l.Text}")));
+                StatusMessage = "Đã chép nhật ký vào clipboard";
+            }
+            catch (Exception ex) { StatusMessage = "Không chép được: " + ex.Message; }
+        }
+
         [ObservableProperty] private DeviceTypeViewModel? _selectedType;
         [ObservableProperty] private string _statusMessage = "";
 
@@ -66,8 +182,13 @@ namespace UI.ViewModels.Device
 
             // Cứ 2 giây kiểm tra lại xem thiết bị còn nối không
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _timer.Tick += (_, _) => { foreach (var d in Devices) d.RefreshStatus(); };
+            _timer.Tick += (_, _) =>
+            {
+                SyncFixtureListener();
+                foreach (var d in Devices) d.RefreshStatus();
+            };
             _timer.Start();
+            SyncFixtureListener();
         }
 
         // ---------- Thêm / xóa (gọi từ DeviceTypeViewModel) ----------
@@ -102,10 +223,31 @@ namespace UI.ViewModels.Device
             return vm;
         }
 
+        // Tự lưu: sau mỗi thay đổi chờ 1 giây (gom nhiều thao tác liền nhau) rồi lưu nếu cấu hình hợp lệ,
+        // để lần sau mở app là nạp lại đúng. Còn lỗi thì giữ trạng thái "chưa lưu" cho tới khi sửa xong.
+        private DispatcherTimer? _autoSave;
+
+        private void ScheduleAutoSave()
+        {
+            if (_autoSave == null)
+            {
+                _autoSave = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _autoSave.Tick += (_, _) =>
+                {
+                    _autoSave!.Stop();
+                    if (IsDirty && !TrySaveQuietly()) StatusMessage = "Có thay đổi chưa lưu (còn ô sai, sửa xong sẽ tự lưu)";
+                };
+            }
+            _autoSave.Stop();
+            _autoSave.Start();
+        }
+
         internal void MarkDirty()
         {
             IsDirty = true;
             StatusMessage = "Có thay đổi chưa lưu";
+            ScheduleAutoSave();
+            SyncFixtureListener();     // đổi chế độ / cổng / Bật thì cổng nhận đổi theo ngay
         }
 
         // ---------- Lưu / kết nối ----------
@@ -163,6 +305,9 @@ namespace UI.ViewModels.Device
         public void Dispose()
         {
             _timer.Stop();
+            _autoSave?.Stop();
+            if (IsDirty) TrySaveQuietly();        // lưu nốt khi đóng
+            _listener?.Dispose();
             Manager.Dispose();
         }
     }

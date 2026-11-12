@@ -26,6 +26,13 @@ namespace Communication.Configuration
             return DeviceSchemas.For(type).FindGroup(key)?.Default ?? "";
         }
 
+        /// <summary>Như GetGroupValue, nhưng ô đang để trống thì dùng giá trị mặc định (file cấu hình cũ hoặc ô bị xóa làm mẫu lệnh / kết quả rỗng).</summary>
+        public string GetGroupValueOrDefault(DeviceType type, string key)
+        {
+            string v = GetGroupValue(type, key);
+            return v.Length > 0 ? v : DeviceSchemas.For(type).FindGroup(key)?.Default ?? "";
+        }
+
         public void SetGroupValue(DeviceType type, string key, string value)
         {
             if (!Groups.TryGetValue(type.ToString(), out var g))

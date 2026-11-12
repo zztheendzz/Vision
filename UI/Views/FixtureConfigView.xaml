@@ -68,11 +68,12 @@
         <Style x:Key="SectionTitle" TargetType="{x:Type TextBlock}">
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="Margin" Value="0,18,0,6" />
         </Style>
         <Style x:Key="HeaderText" TargetType="{x:Type TextBlock}">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource VsAccentBrush}" />
+            <Setter Property="Foreground" Value="#4FC1FF" />
             <Setter Property="Margin" Value="4,0,4,4" />
         </Style>
     </UserControl.Resources>
@@ -110,6 +111,8 @@
             </ItemsControl>
             <Button Content="Quét IP máy này" Style="{StaticResource OutlineButton}" HorizontalAlignment="Left"
                     Command="{Binding ScanIpCommand}" />
+            <TextBlock Text="{Binding ListenerStatus}" Margin="0,6,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
+                       Foreground="{StaticResource VsTextBrush}" />
 
             <!-- ============ DANH SÁCH KHUÔN TEST: mỗi khuôn một dòng ============ -->
             <DockPanel Margin="0,18,0,6">
@@ -191,6 +194,15 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
+                    <DataGridTemplateColumn Header="Dưới" Width="46">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBox Text="{Binding FieldMap[BelowNo].Text, UpdateSourceTrigger=LostFocus}" Style="{StaticResource CellBox}"
+                                         ToolTip="Số khuôn nằm ngay dưới khuôn này (0 = không có). Khuôn dưới đang mở thì khuôn này bị cấm mở, tránh va chạm robot." />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
                     <DataGridTemplateColumn Header="Thanh ghi KQ" Width="90">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
@@ -239,10 +251,15 @@
                     <DataGridTemplateColumn Header="PLC nguồn" Width="110">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ComboBox Margin="0,1"
-                                          ItemsSource="{Binding DataContext.Plcs, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                          DisplayMemberPath="Name"
-                                          SelectedItem="{Binding SourcePlc, Mode=TwoWay}" />
+                                <ComboBox Margin="0,1" MinWidth="96"
+                                          ItemsSource="{Binding PlcChoices}"
+                                          SelectedItem="{Binding SourcePlc, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -332,6 +349,14 @@
                                     </StackPanel>
                                 </DockPanel>
 
+                                <!-- Gửi cùng một kết quả cho mọi slot của khuôn, khỏi cần chọn từng bản -->
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <TextBlock Text="Gửi cho tất cả slot:" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{StaticResource VsMutedBrush}" />
+                                    <ComboBox ItemsSource="{Binding SlotChoices}" SelectedItem="{Binding AllState, Mode=TwoWay}" MinWidth="96" />
+                                    <Button Content="Gửi PLC" Style="{StaticResource AccentButton}" Command="{Binding FixtureSendAllCommand}" />
+                                </StackPanel>
+
                                 <!-- Từng slot: số slot theo ô "Số slot" của khuôn, màu và chữ theo trạng thái -->
                                 <ItemsControl ItemsSource="{Binding Slots}" Margin="0,8,0,0" Focusable="False">
                                     <ItemsControl.ItemsPanel>
@@ -341,7 +366,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Width="104" Height="58" CornerRadius="4" Margin="0,0,8,6" Padding="8,5"
+                                            <Border Width="150" CornerRadius="4" Margin="0,0,8,8" Padding="8,6"
                                                     BorderThickness="1" BorderBrush="{StaticResource VsButtonBorderBrush}">
                                                 <Border.Style>
                                                     <Style TargetType="{x:Type Border}">
@@ -372,8 +397,23 @@
                                                     </Style>
                                                 </Border.Style>
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Title}" Foreground="#E6E6E6" FontSize="11" />
-                                                    <TextBlock Text="{Binding StateText}" Foreground="#FFFFFF" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding SampleText}" Foreground="#FFFFFF" FontSize="11" />
+                                                        <TextBlock Text="{Binding Title}" Foreground="#E6E6E6" FontSize="11" />
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding StateText}" Foreground="#FFFFFF" FontSize="16" FontWeight="Bold" Margin="0,2,0,6" />
+
+                                                    <!-- Chọn kết quả (Pass, Fail...) rồi gửi vào thanh ghi của slot -->
+                                                    <ComboBox ItemsSource="{x:Static local:SlotChoicesHolder.Items}"
+                                                              SelectedItem="{Binding State, Mode=TwoWay}" Margin="0,0,0,4"
+                                                              ToolTip="Chọn kết quả gửi cho slot này" />
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="Gửi PLC" Style="{StaticResource AccentButton}"
+                                                                Command="{Binding SendCommand}" Padding="8,2"
+                                                                ToolTip="Ghi mã kết quả đã chọn vào thanh ghi của slot" />
+                                                        <TextBox Text="{Binding Register, UpdateSourceTrigger=LostFocus}" Style="{StaticResource CellBox}"
+                                                                 ToolTip="Thanh ghi PLC của slot này (mặc định liên tiếp theo thứ tự slot)" />
+                                                    </DockPanel>
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
@@ -385,7 +425,76 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Margin="2,0,0,0" TextWrapping="Wrap" Foreground="{StaticResource VsMutedBrush}" FontSize="11"
-                       Text="Slot đổi trạng thái khi nhận dòng kết quả đúng mẫu ở bảng 'Kết quả từng slot' (hoặc khi lệnh được trả lời bằng dòng đó). Đổi 'Slot' trong bảng khuôn thì số ô ở đây đổi theo." />
+                       Text="Chọn kết quả ở từng slot (hoặc 'Gửi cho tất cả slot') rồi bấm Gửi PLC; không cần dòng kết quả từ khuôn. Ô nhỏ dưới mỗi slot là thanh ghi PLC của slot đó, mặc định liên tiếp; sửa một ô thì lưu thành danh sách riêng. CHECKSENSOR có thể gắn trạng thái từng slot sau số khuôn: YES_1_1 (slot 1 có bản), YES_1_1011 hoặc YES_1_1_0_1_1 (4 slot); khuôn một slot thì bỏ phần sau được (YES_1)." />
+
+            <!-- ============ NHẬT KÝ GỬI / NHẬN ============ -->
+            <DockPanel Margin="0,18,0,6">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Chép" Style="{StaticResource OutlineButton}" Command="{Binding CopyLogCommand}" />
+                    <Button Content="Xóa nhật ký" Style="{StaticResource OutlineButton}" Command="{Binding ClearLogCommand}" />
+                </StackPanel>
+                <TextBlock Text="Nhật ký gửi / nhận" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+            <Border Background="#1B1B1C" BorderBrush="{StaticResource VsButtonBorderBrush}" BorderThickness="1" CornerRadius="4">
+                <ListBox x:Name="LogList" ItemsSource="{Binding Log}" Height="260" Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="13">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="{x:Type ListBoxItem}">
+                            <Setter Property="Padding" Value="8,3" />
+                            <Setter Property="Foreground" Value="#FFFFFF" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="BorderBrush" Value="#2E2E32" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#2A2D33" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#213B55" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Time}" Width="100" Foreground="#B4B4B4" />
+                                <TextBlock Text="{Binding Source}" Width="120" FontWeight="SemiBold" Foreground="#9CDCFE" />
+                                <TextBlock x:Name="Kind" Text="{Binding Kind}" Width="60" FontWeight="Bold" Foreground="#FFFFFF" />
+                                <TextBlock x:Name="Body" Text="{Binding Text}" Foreground="#FFFFFF" />
+                            </StackPanel>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Kind}" Value="GỬI">
+                                    <Setter TargetName="Kind" Property="Foreground" Value="#4FC1FF" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind}" Value="NHẬN">
+                                    <Setter TargetName="Kind" Property="Foreground" Value="#6BD68A" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind}" Value="PLC">
+                                    <Setter TargetName="Kind" Property="Foreground" Value="#FFC857" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind}" Value="INFO">
+                                    <Setter TargetName="Body" Property="Foreground" Value="#C8C8C8" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind}" Value="LỖI">
+                                    <Setter TargetName="Kind" Property="Foreground" Value="#FF6B6B" />
+                                    <Setter TargetName="Body" Property="Foreground" Value="#FFB0B0" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
 
             <!-- ============ BẢNG LỆNH ============ -->
             <TextBlock Text="Lệnh gửi khuôn test" Style="{StaticResource SectionTitle}" />
@@ -414,7 +523,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Title}" VerticalAlignment="Center" Margin="4,0" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="0" Text="{Binding Title}" VerticalAlignment="Center" Margin="4,0" TextTrimming="CharacterEllipsis" Foreground="#FFFFFF" FontWeight="SemiBold" />
                                     <TextBox Grid.Column="1" Margin="4,0" Style="{StaticResource CellBox}" ToolTip="{Binding Send.Error}"
                                              Text="{Binding Send.Text, UpdateSourceTrigger=LostFocus}" />
                                     <TextBox Grid.Column="2" Margin="4,0" Style="{StaticResource CellBox}" ToolTip="{Binding Ok.Error}"
@@ -452,7 +561,7 @@
                                         <ColumnDefinition Width="220" />
                                         <ColumnDefinition Width="110" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" Foreground="#FFFFFF" />
                                     <TextBox Grid.Column="1" Margin="4,0" Style="{StaticResource CellBox}" ToolTip="{Binding Pattern.Error}"
                                              Text="{Binding Pattern.Text, UpdateSourceTrigger=LostFocus}"
                                              Visibility="{Binding HasPattern, Converter={StaticResource BoolToVis}}" />

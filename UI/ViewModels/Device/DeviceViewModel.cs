@@ -82,6 +82,9 @@ namespace UI.ViewModels.Device
         [ObservableProperty] private string _nameError = "";
 
         /// <summary>Đổi tên. Tên rỗng hoặc trùng bị từ chối: giữ tên cũ và hiện lỗi.</summary>
+        /// <summary>Danh sách chọn (PLC nguồn...) hiện tên thiết bị thay vì tên kiểu.</summary>
+        public override string ToString() => Name;
+
         public string Name
         {
             get => Config.Name;
@@ -136,6 +139,9 @@ namespace UI.ViewModels.Device
         }
 
         public void RefreshSourcePlc() => OnPropertyChanged(nameof(SourcePlc));
+
+        /// <summary>Danh sách PLC để chọn (dùng cho ô "PLC nguồn" trong bảng khuôn test).</summary>
+        public ObservableCollection<DeviceViewModel> PlcChoices => _owner.Plcs;
 
         // ---------- Trạng thái ----------
 
@@ -210,10 +216,12 @@ namespace UI.ViewModels.Device
             {
                 await transport.SendAsync(TestText);
                 Message = $"Đã gửi: {TestText}";
+                if (Config.Type == DeviceType.Fixture) Log("GỬI", TestText);
             }
             catch (Exception ex)
             {
                 Message = "Lỗi gửi: " + ex.Message;
+                if (Config.Type == DeviceType.Fixture) Log("LỖI", ex.Message);
             }
         }
 
@@ -641,32 +649,116 @@ namespace UI.ViewModels.Device
         public ObservableCollection<SlotViewModel> Slots { get; } = new();
 
         [ObservableProperty] private string _fixtureStateText = "Chưa rõ";
+
+        /// <summary>Khuôn đang mở (true), đóng (false) hoặc chưa biết (null). Khóa an toàn dựa vào đây.</summary>
+        public bool? IsOpen { get; private set; }
+
+        private void SetOpen(bool open)
+        {
+            IsOpen = open;
+            FixtureStateText = open ? "Đang mở" : "Đang đóng";
+        }
         [ObservableProperty] private string _sensorText = "Chưa kiểm";
         [ObservableProperty] private bool _fixtureBusy;
 
         /// <summary>Số khuôn dùng trong lệnh (SS).</summary>
         public int FixtureNo => Config.GetInt("FixtureNo", 1);
 
+        private bool _refreshingSlots;
+
         private void RebuildSlots()
         {
             OnPropertyChanged(nameof(FixtureNo));
             int count = Math.Clamp(Config.GetInt("Slots", 1), 1, 64);
-            if (Slots.Count == count) return;
 
             // Giữ trạng thái các slot còn lại khi đổi số slot
             while (Slots.Count > count) Slots.RemoveAt(Slots.Count - 1);
-            while (Slots.Count < count) Slots.Add(new SlotViewModel(Slots.Count + 1));
+            while (Slots.Count < count)
+            {
+                var slot = new SlotViewModel(Slots.Count + 1);
+                slot.RegisterEdited += OnSlotRegisterEdited;
+                slot.SendRequested += s => _ = SendSlotAsync(s);
+                Slots.Add(slot);
+            }
+            RefreshSlotRegisters();
         }
 
-        private FixtureProtocol Protocol => new(k => _catalog.GetGroupValue(DeviceType.Fixture, k));
+        /// <summary>Điền thanh ghi từng slot từ ô cấu hình (một địa chỉ thì các slot liên tiếp).</summary>
+        private void RefreshSlotRegisters()
+        {
+            _refreshingSlots = true;
+            try
+            {
+                var resolved = SlotAddressing.Resolve(Config.GetString("ResultReg"), Slots.Count, out _);
+                for (int i = 0; i < Slots.Count; i++) Slots[i].SetRegisterQuiet(resolved[i] ?? "");
+            }
+            finally { _refreshingSlots = false; }
+        }
+
+        /// <summary>Người dùng sửa thanh ghi của một slot: ghi lại thành danh sách trong cấu hình (liên tiếp thì chỉ giữ địa chỉ đầu).</summary>
+        private void OnSlotRegisterEdited(SlotViewModel changed)
+        {
+            if (_refreshingSlots) return;
+
+            var field = Fields.FirstOrDefault(f => f.Def.Key == "ResultReg");
+            if (field == null) return;
+
+            var parsed = new List<Communication.Plc.PlcAddress>();
+            foreach (var slot in Slots)
+            {
+                if (!Communication.Plc.PlcAddress.TryParse(slot.Register, out var addr, out string? error))
+                {
+                    Message = $"{slot.Title}: {(slot.Register.Length == 0 ? "chưa nhập thanh ghi" : error)}";
+                    RefreshSlotRegisters();     // trả ô về giá trị đang lưu
+                    return;
+                }
+                parsed.Add(addr);
+            }
+
+            bool sequential = true;
+            for (int i = 1; i < parsed.Count && sequential; i++)
+                sequential = parsed[0].TryOffset(i, out var expected) && expected == parsed[i];
+
+            field.Text = sequential ? parsed[0].ToString() : string.Join(", ", parsed.Select(a => a.ToString()));
+            Message = sequential ? "Thanh ghi các slot liên tiếp từ " + parsed[0] : "Đã lưu danh sách thanh ghi riêng từng slot";
+        }
+
+        // Kết quả chọn để gửi cho cả khuôn
+        public IReadOnlyList<SlotState> SlotChoices => SlotViewModel.Choices;
+        [ObservableProperty] private SlotState _allState = SlotState.Pass;
+
+        /// <summary>Gửi kết quả đang chọn của một slot vào PLC.</summary>
+        private async Task SendSlotAsync(SlotViewModel slot)
+        {
+            if (slot.State == SlotState.Unknown) { Message = $"{slot.Title}: chọn kết quả trước khi gửi"; return; }
+            await WriteSlotResultToPlcAsync(slot.Number, slot.State);
+        }
+
+        /// <summary>Đặt cùng một kết quả cho mọi slot của khuôn rồi gửi từng slot vào PLC.</summary>
+        [RelayCommand]
+        private async Task FixtureSendAllAsync()
+        {
+            var state = AllState;
+            foreach (var slot in Slots.ToList())
+            {
+                slot.State = state;
+                await WriteSlotResultToPlcAsync(slot.Number, state);
+            }
+            Message = $"Đã gửi {state.ToString().ToUpperInvariant()} cho {Slots.Count} slot";
+        }
+
+        private FixtureProtocol Protocol => new(k => _catalog.GetGroupValueOrDefault(DeviceType.Fixture, k));
 
         [RelayCommand] private Task FixtureOpenAsync() => RunFixtureCommandAsync(FixtureCommand.Open);
         [RelayCommand] private Task FixtureCloseAsync() => RunFixtureCommandAsync(FixtureCommand.Close);
         [RelayCommand] private Task FixtureCheckSensorAsync() => RunFixtureCommandAsync(FixtureCommand.CheckSensor);
         [RelayCommand] private Task FixtureStateAsync() => RunFixtureCommandAsync(FixtureCommand.State);
 
-        /// <summary>Gửi một lệnh tới khuôn, chờ trả lời một dòng rồi cập nhật trạng thái hiển thị.</summary>
-        public async Task RunFixtureCommandAsync(FixtureCommand command)
+        /// <summary>
+        /// Gửi một lệnh tới khuôn, chờ trả lời một dòng rồi cập nhật trạng thái hiển thị.
+        /// automatic = true (vòng chạy tự động): đi qua khóa an toàn. Bấm tay trên giao diện thì không bị chặn.
+        /// </summary>
+        public async Task RunFixtureCommandAsync(FixtureCommand command, bool automatic = false)
         {
             if (_owner.Manager.GetLink(Id) is not ITransport transport || !transport.IsConnected)
             {
@@ -678,23 +770,132 @@ namespace UI.ViewModels.Device
             FixtureBusy = true;
             try
             {
-                var protocol = Protocol;
-                int ss = FixtureNo;
-                string text = protocol.BuildCommand(command, ss);
-                Message = $"Gửi: {text}";
-
-                string reply = await transport.RequestAsync(text, 5000);
-                ApplyFixtureReply(command, reply, ss, protocol);
+                if (automatic && InterlockOn)
+                {
+                    string? reason = await CheckInterlockAsync(transport, command);
+                    if (reason != null)
+                    {
+                        Message = "Khóa an toàn: " + reason;
+                        Log("LỖI", "Khóa an toàn chặn lệnh " + command + ": " + reason);
+                        return;
+                    }
+                }
+                await SendFixtureCommandAsync(transport, command);
             }
             catch (Exception ex)
             {
                 Message = "Lỗi: " + ex.Message;
+                Log("LỖI", ex.Message);
             }
             finally { FixtureBusy = false; }
         }
 
+        private async Task SendFixtureCommandAsync(ITransport transport, FixtureCommand command)
+        {
+            var protocol = Protocol;
+            int ss = FixtureNo;
+            string text = protocol.BuildCommand(command, ss);
+            Message = $"Gửi: {text}";
+            Log("GỬI", text);
+
+            string reply = await transport.RequestAsync(text, 5000);
+            Log("NHẬN", reply);
+            ApplyFixtureReply(command, reply, ss, protocol);
+        }
+
+        // ---------- Khóa an toàn đóng / mở (chỉ cho chạy tự động; bấm tay không bị chặn) ----------
+        //  Đóng: chỉ khi khuôn đang mở và có hàng (tự kiểm CHECKSENSOR trước khi đóng).
+        //  Mở:   không mở khi có slot đang test (BUSY) hoặc đã PASS; chỉ mở khi FAIL / REPAIR (retest).
+        //  Va chạm robot: khuôn nằm ngay trên không được mở khi khuôn nằm ngay dưới đang mở (hoặc chưa rõ).
+
+        private bool InterlockOn => _catalog.GetGroupValueOrDefault(DeviceType.Fixture, "Interlock") != "false";
+
+        /// <summary>Số khuôn nằm ngay dưới khuôn này (0 = không có).</summary>
+        public int BelowNo => Config.GetInt("BelowNo", 0);
+
+        private IEnumerable<DeviceViewModel> AllFixtures()
+            => _owner.Devices.Where(d => d.Config.Type == DeviceType.Fixture && d.Enabled);
+
+        /// <summary>Trả về lý do không được đóng, hoặc null nếu đóng được.</summary>
+        private string? CloseBlockReason()
+        {
+            if (IsOpen == false) return $"{Name}: khuôn đang đóng rồi";
+            if (Slots.All(x => x.SampleText.Length == 0)) return $"{Name}: chưa biết có hàng không (kiểm sensor chưa được)";
+            if (!Slots.Any(x => x.SampleText == "Có bản")) return $"{Name}: không có hàng, không được đóng";
+            return null;
+        }
+
+        /// <summary>Trả về lý do không được mở, hoặc null nếu mở được. ignoreBelow: bỏ qua luật khuôn dưới (OPEN ALL xét riêng).</summary>
+        private string? OpenBlockReason(bool ignoreBelow = false)
+        {
+            if (IsOpen == true) return $"{Name}: khuôn đang mở rồi";
+
+            var busy = Slots.FirstOrDefault(x => x.State == SlotState.Busy);
+            if (busy != null) return $"{Name}: {busy.Title} đang test, chưa được mở";
+            var pass = Slots.FirstOrDefault(x => x.State == SlotState.Pass);
+            if (pass != null) return $"{Name}: {pass.Title} đang PASS, chỉ khuôn FAIL / REPAIR mới được mở";
+
+            if (!ignoreBelow && BelowNo > 0)
+            {
+                var below = AllFixtures().FirstOrDefault(d => d != this && d.FixtureNo == BelowNo);
+                if (below != null)
+                {
+                    if (below.IsOpen == true) return $"{Name}: khuôn dưới ({below.Name}, khuôn {BelowNo:00}) đang mở, mở lên sẽ va chạm robot";
+                    if (below.IsOpen == null) return $"{Name}: chưa biết khuôn dưới ({below.Name}) đang mở hay đóng, bấm 'Kiểm trạng thái' ở khuôn đó trước";
+                }
+            }
+            return null;
+        }
+
+        private async Task<string?> CheckInterlockAsync(ITransport transport, FixtureCommand command)
+        {
+            switch (command)
+            {
+                case FixtureCommand.Open:
+                    return OpenBlockReason();
+
+                case FixtureCommand.Close:
+                    await SendFixtureCommandAsync(transport, FixtureCommand.CheckSensor);   // luôn lấy hiện trạng hàng trước khi đóng
+                    return CloseBlockReason();
+
+                case FixtureCommand.OpenAll:
+                    {
+                        foreach (var d in AllFixtures())
+                        {
+                            if (d.IsOpen == true) continue;
+                            string? r = d.OpenBlockReason(ignoreBelow: true);
+                            if (r != null) return r;
+                            if (d.BelowNo > 0 && AllFixtures().Any(x => x != d && x.FixtureNo == d.BelowNo))
+                                return $"OPEN ALL mở cùng lúc {d.Name} và khuôn dưới nó (khuôn {d.BelowNo:00}), sẽ va chạm robot; mở từng khuôn, khuôn dưới đóng trước";
+                        }
+                        return null;
+                    }
+
+                case FixtureCommand.CloseAll:
+                    {
+                        foreach (var d in AllFixtures())
+                        {
+                            if (d.IsOpen == false) continue;
+                            if (d._owner.Manager.GetLink(d.Id) is not ITransport t || !t.IsConnected)
+                                return $"{d.Name}: chưa kết nối, không kiểm được có hàng";
+                            await d.SendFixtureCommandAsync(t, FixtureCommand.CheckSensor);
+                            string? r = d.CloseBlockReason();
+                            if (r != null) return r;
+                        }
+                        return null;
+                    }
+            }
+            return null;
+        }
+
         private void ApplyFixtureReply(FixtureCommand command, string reply, int ss, FixtureProtocol protocol)
         {
+            if (command == FixtureCommand.CheckSensor)
+            {
+                ApplySensorReply(reply, ss, protocol);
+                return;
+            }
+
             var r = protocol.Interpret(command, reply, ss);
             if (!r.Matched)
             {
@@ -708,22 +909,41 @@ namespace UI.ViewModels.Device
             {
                 case FixtureCommand.Open:
                 case FixtureCommand.OpenAll:
-                    if (r.Positive) FixtureStateText = "Đang mở";
+                    if (r.Positive) SetOpen(true);
                     break;
                 case FixtureCommand.Close:
                 case FixtureCommand.CloseAll:
-                    if (r.Positive) FixtureStateText = "Đang đóng";
-                    break;
-                case FixtureCommand.CheckSensor:
-                    SensorText = r.Positive ? "Có hàng" : "Không có hàng";
+                    if (r.Positive) SetOpen(false);
                     break;
                 case FixtureCommand.State:
-                    FixtureStateText = r.Positive ? "Đang mở" : "Đang đóng";
+                    SetOpen(r.Positive);
                     break;
             }
 
             string verdict = r.Positive ? "OK" : "LỖI";
             Message = r.Slots.Length > 0 ? $"{command}: {verdict} (slot: {r.Slots})" : $"{command}: {verdict} ({reply})";
+        }
+
+        /// <summary>Đọc trả lời CHECKSENSOR (YES_{SS} / NO_{SS}, có thể kèm trạng thái từng slot) rồi cập nhật slot và bit có bản.</summary>
+        private void ApplySensorReply(string reply, int ss, FixtureProtocol protocol)
+        {
+            var r = protocol.InterpretSensor(reply, ss, Slots.Count);
+            if (!r.Matched)
+            {
+                Message = ApplyLine(reply) ? $"Nhận: {reply}" : $"Trả lời không khớp mẫu nào: {reply}";
+                return;
+            }
+            if (r.Slots == null)
+            {
+                Message = $"CHECKSENSOR: {r.Warning} ({reply})";
+                return;
+            }
+
+            for (int i = 0; i < Slots.Count; i++) Slots[i].SampleText = r.Slots[i] ? "Có bản" : "Trống";
+            int have = r.Slots.Count(x => x);
+            SensorText = have == 0 ? "Không có hàng" : have == r.Slots.Length ? "Có hàng" : $"Có hàng {have}/{r.Slots.Length}";
+            Message = $"CHECKSENSOR: {SensorText} ({reply})";
+            _ = WriteSampleBitsAsync(r.Slots);
         }
 
         /// <summary>
@@ -740,7 +960,71 @@ namespace UI.ViewModels.Device
                 var slot = Slots.FirstOrDefault(x => x.Number == nn);
                 if (slot != null) slot.State = state;
             });
+            _ = WriteSlotResultToPlcAsync(nn, state);
             return true;
+        }
+
+        /// <summary>Ghi mã kết quả của một slot vào thanh ghi PLC của slot đó (qua PLC nguồn đã chọn), rồi đọc lại để kiểm tra.</summary>
+        /// <summary>Hiện thông báo và ghi vào nhật ký (kind PLC, hoặc LỖI nếu nội dung báo lỗi).</summary>
+        private void ReportPlc(string text)
+            => RunOnUi(() =>
+            {
+                Message = text;
+                Log(text.Contains("lỗi", StringComparison.OrdinalIgnoreCase) || text.Contains("nhưng đọc lại") ? "LỖI" : "PLC", text);
+            });
+
+        private void Log(string kind, string text) => _owner.AddFixtureLog(Name, kind, text);
+
+        private async Task WriteSlotResultToPlcAsync(int slotNumber, SlotState state)
+        {
+            try
+            {
+                int? code = Protocol.PlcCode(state);
+                if (code == null) { ReportPlc($"Slot {slotNumber}: {state.ToString().ToUpperInvariant()} không có mã gửi PLC"); return; }
+
+                var plc = _owner.Manager.PlcFor(Config);
+                if (plc == null) { ReportPlc($"Slot {slotNumber}: chưa có PLC kết nối để ghi mã {code}"); return; }
+
+                var addresses = SlotAddressing.Resolve(Config.GetString("ResultReg"), Slots.Count, out string? warning);
+                string? address = slotNumber >= 1 && slotNumber <= addresses.Length ? addresses[slotNumber - 1] : null;
+                if (address == null)
+                {
+                    ReportPlc($"Slot {slotNumber}: chưa có thanh ghi kết quả" + (warning != null ? $" ({warning})" : ""));
+                    return;
+                }
+
+                await plc.WriteWordAsync(address, code.Value);
+                short back = await plc.ReadWordAsync(address);
+                ReportPlc(back == code.Value
+                    ? $"Slot {slotNumber}: {state.ToString().ToUpperInvariant()} → ghi {address} = {code}"
+                    : $"Slot {slotNumber}: ghi {address} = {code} nhưng đọc lại được {back}");
+            }
+            catch (Exception ex)
+            {
+                ReportPlc($"Slot {slotNumber}: lỗi ghi PLC: {ex.Message}");
+            }
+        }
+
+        /// <summary>Ghi cờ "có bản" của từng slot (1 = có bản) vào bit riêng của slot đó.</summary>
+        private async Task WriteSampleBitsAsync(bool[] hasSample)
+        {
+            try
+            {
+                var plc = _owner.Manager.PlcFor(Config);
+                if (plc == null) return;
+
+                var addresses = SlotAddressing.Resolve(Config.GetString("HasSampleBit"), hasSample.Length, out _);
+                for (int i = 0; i < addresses.Length; i++)
+                {
+                    if (addresses[i] == null) continue;
+                    await plc.WriteBitAsync(addresses[i]!, hasSample[i]);
+                    ReportPlc($"Slot {i + 1}: ghi bit có bản {addresses[i]} = {(hasSample[i] ? 1 : 0)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ReportPlc("Lỗi ghi bit có bản: " + ex.Message);
+            }
         }
 
         // ---------- Camera: chỉnh thông số ảnh / camera khi xem trực tiếp ----------

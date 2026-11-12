@@ -239,6 +239,7 @@
 
     <!-- ================= TAB (tài liệu và khung dưới) ================= -->
     <Style TargetType="{x:Type TabControl}">
+        <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
         <Setter Property="Background" Value="{StaticResource VsWindowBrush}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
@@ -622,6 +623,17 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Các điều khiển này mặc định dùng chữ đen của hệ thống, nên ép chữ sáng theo theme -->
+    <Style TargetType="{x:Type Label}">
+        <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+    </Style>
+    <Style TargetType="{x:Type GroupBox}">
+        <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+    </Style>
+    <Style TargetType="{x:Type Expander}">
+        <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
     </Style>
 
 </ResourceDictionary>

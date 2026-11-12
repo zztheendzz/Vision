@@ -6,6 +6,11 @@
         xmlns:local="clr-namespace:UI.Views"
         mc:Ignorable="d"
         Title="DeviceConfigWindow" Height="450" Width="800">
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCommand}" />
+    </Window.InputBindings>
+
+
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </Window.Resources>
@@ -22,7 +27,7 @@
                     <Button Content="Ngắt tất cả" Style="{StaticResource OutlineButton}"
                             Command="{Binding DisconnectAllCommand}" />
                     <Button Content="Lưu" Width="90" Style="{StaticResource AccentButton}"
-                            Command="{Binding SaveCommand}" />
+                            Command="{Binding SaveCommand}" ToolTip="Lưu (Ctrl+S)" />
                     <Button Content="Đóng" Width="90" Style="{StaticResource OutlineButton}"
                             Click="Close_Click" />
                 </StackPanel>
@@ -187,8 +192,13 @@
                                                                            Foreground="{StaticResource VsMutedBrush}" />
                                                                     <ComboBox Grid.Column="1" MinWidth="200" HorizontalAlignment="Left"
                                                                           ItemsSource="{Binding DataContext.Plcs, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                                                          DisplayMemberPath="Name"
-                                                                          SelectedItem="{Binding SourcePlc, Mode=TwoWay}" />
+                                                                          SelectedItem="{Binding SourcePlc, Mode=TwoWay}">
+                                                                        <ComboBox.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <TextBlock Text="{Binding Name}" />
+                                                                            </DataTemplate>
+                                                                        </ComboBox.ItemTemplate>
+                                                                    </ComboBox>
                                                                 </Grid>
 
                                                                 <local:FieldsEditor Fields="{Binding Fields}" />

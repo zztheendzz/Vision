@@ -1,22 +1,57 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
+
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+
+using UI.ViewModels.Device;
+using UI.ViewModels.RunAndDisplay;
 
 namespace UI.Views
 {
-    /// <summary>Tab "Khuôn test": cài đặt chung gọn, bảng tất cả khuôn (sửa tại chỗ), bảng lệnh và bảng kết quả slot.</summary>
+    /// <summary>Tab "Khuôn test": cài đặt chung gọn, bảng tất cả khuôn (sửa tại chỗ), trạng thái từng slot, nhật ký, bảng lệnh và bảng kết quả slot.</summary>
     public partial class FixtureConfigView : UserControl
     {
-        public FixtureConfigView() => InitializeComponent();
+        private INotifyCollectionChanged? _log;
+
+        public FixtureConfigView()
+        {
+            InitializeComponent();
+            DataContextChanged += (_, _) => HookLog();
+            Unloaded += (_, _) => Unhook();
+        }
+
+        // Nhật ký tự cuộn xuống dòng mới nhất
+        private void HookLog()
+        {
+            Unhook();
+            if (DataContext is DeviceTypeViewModel vm)
+            {
+                _log = vm.Log;
+                _log.CollectionChanged += OnLogChanged;
+            }
+        }
+
+        private void Unhook()
+        {
+            if (_log != null) _log.CollectionChanged -= OnLogChanged;
+            _log = null;
+        }
+
+        private void OnLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action != NotifyCollectionChangedAction.Add) return;
+            // Chạy sau khi danh sách đã cập nhật xong (gọi ngay thì ItemsControl chưa kịp đồng bộ → InvalidOperationException)
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (LogList.Items.Count > 0) LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
+                }
+                catch (InvalidOperationException) { }
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
 
         // Bảng nằm trong khung cuộn của cả trang: chuyển con lăn chuột cho khung ngoài để cuộn được
         private void ForwardWheel(object sender, MouseWheelEventArgs e)

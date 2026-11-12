@@ -20,6 +20,11 @@ namespace Communication.Fixtures
     public readonly record struct FixtureReply(bool Matched, bool Positive, string Slots);
 
     /// <summary>
+    /// Trả lời CHECKSENSOR. Matched: khớp mẫu YES / NO. Slots: có bản hay không của từng slot (null nếu trả lời sai định dạng, xem Warning).
+    /// </summary>
+    public readonly record struct SensorReply(bool Matched, bool Positive, bool[]? Slots, string? Warning);
+
+    /// <summary>
     /// Dựng lệnh gửi khuôn test và đọc trả lời / kết quả slot theo các mẫu trong cấu hình (bảng lệnh và bảng kết quả).
     /// {SS} = số khuôn, {NN} = số slot, {SLOTS} = danh sách slot lỗi. Khi so khớp, số được so theo giá trị (01 = 1) và không phân biệt hoa thường.
     /// </summary>
@@ -57,6 +62,39 @@ namespace Communication.Fixtures
             if (TryMatch(_get($"Cmd.{KeyOf(command)}.Err"), line, out int? s2, out _, out string slots2) && (s2 == null || s2 == ss))
                 return new FixtureReply(true, false, slots2);
             return new FixtureReply(false, false, "");
+        }
+
+        /// <summary>
+        /// Đọc trả lời CHECKSENSOR. Sau mẫu YES_{SS} / NO_{SS} có thể gắn trạng thái từng slot, mỗi slot 0 hoặc 1,
+        /// ví dụ YES_1_1 (khuôn 1, slot 1 có bản), YES_1_1_0_1_1 hoặc YES_1_1011 (khuôn 1, 4 slot). Khuôn chỉ có một slot thì bỏ phần sau được (YES_1).
+        /// Không có phần sau: YES = mọi slot có bản, NO = mọi slot trống.
+        /// </summary>
+        public SensorReply InterpretSensor(string reply, int ss, int slots)
+        {
+            string line = (reply ?? "").Trim();
+            foreach (bool positive in new[] { true, false })
+            {
+                string template = _get(positive ? "Cmd.CheckSensor.Ok" : "Cmd.CheckSensor.Err");
+                if (!TryMatch(template + "{SLOTS}", line, out int? s, out _, out string rest)) continue;
+                if (s != null && s != ss) continue;
+
+                var bits = new List<bool>();
+                foreach (string token in Regex.Split(rest, @"[^0-9]+").Where(t => t.Length > 0))
+                {
+                    foreach (char c in token)
+                    {
+                        if (c is not ('0' or '1'))
+                            return new SensorReply(true, positive, null, $"Trạng thái slot chỉ được là 0 hoặc 1 (nhận '{rest.Trim('_', ',', ' ')}')");
+                        bits.Add(c == '1');
+                    }
+                }
+
+                if (bits.Count == 0) return new SensorReply(true, positive, Enumerable.Repeat(positive, slots).ToArray(), null);
+                if (bits.Count != slots)
+                    return new SensorReply(true, positive, null, $"Trả lời có {bits.Count} trạng thái slot nhưng khuôn có {slots} slot");
+                return new SensorReply(true, positive, bits.ToArray(), null);
+            }
+            return new SensorReply(false, false, null, null);
         }
 
         private static readonly (SlotState State, string Key)[] ResultKeys =

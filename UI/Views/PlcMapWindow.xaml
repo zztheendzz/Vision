@@ -6,6 +6,11 @@
         xmlns:local="clr-namespace:UI.Views"
         mc:Ignorable="d"
         Title="PlcMapWindow" Height="450" Width="800">
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCommand}" />
+    </Window.InputBindings>
+
+
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
@@ -74,7 +79,7 @@
             <DockPanel Grid.Row="0" Margin="0,0,0,8">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Content="Mở..." Style="{StaticResource OutlineButton}" Command="{Binding OpenCommand}" />
-                    <Button Content="Lưu" Width="80" Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}" />
+                    <Button Content="Lưu" Width="80" Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}" ToolTip="Lưu (Ctrl+S)" />
                     <Button Content="Lưu thành..." Style="{StaticResource OutlineButton}" Command="{Binding SaveAsCommand}" />
                     <Button Content="Đặt lại mặc định" Style="{StaticResource OutlineButton}" Command="{Binding ResetToDefaultsCommand}" />
                     <Button Content="Kiểm tra" Style="{StaticResource OutlineButton}" Command="{Binding RefreshIssuesCommand}" />
