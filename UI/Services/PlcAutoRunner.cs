@@ -8,12 +8,11 @@ namespace UI.Services
 {
     /// <summary>
     /// Chạy tự động theo tín hiệu PLC (bắt tay bằng bit):
-    ///   1. PLC đặt "Bit PLC yêu cầu chụp" từ 0 lên 1  → chương trình chụp, chạy đồ thị, gửi độ bù cho robot (chế độ Chạy thật), lưu kết quả.
+    ///   1. PLC bật "Bit PLC yêu cầu chụp" = 1 (mặc định M601). Chương trình đọc liên tục; thấy 1 thì HẠ NGAY bit này về 0 (đã nhận lệnh),
+    ///      rồi xóa các bit kết quả cũ, chụp, chạy đồ thị, gửi độ bù cho robot (chế độ Chạy thật), lưu kết quả.
     ///   2. Chương trình ghi kết quả về PLC: Bit OK / Bit NG / Bit lỗi (một trong ba), rồi CUỐI CÙNG mới đặt "Bit vision xong" = 1.
-    ///   3. PLC thấy Bit xong = 1 thì đọc kết quả, rồi hạ bit yêu cầu chụp về 0.
-    ///   4. Chương trình thấy bit yêu cầu về 0 thì xóa Bit xong / OK / NG / lỗi. Sẵn sàng cho lần sau.
-    /// PLC phải GIỮ bit yêu cầu chụp = 1 cho đến khi thấy Bit xong. Bit nào để trống thì bỏ qua, nhưng phải có ít nhất một bit báo về.
-    /// Lần đầu bật: nếu bit yêu cầu đang là 1 thì chờ nó về 0 rồi mới nhận lệnh (tránh chạy ngoài ý muốn).
+    ///   3. PLC thấy Bit xong = 1 thì đọc kết quả. Các bit kết quả được xóa ở lần yêu cầu chụp kế tiếp (hoặc khi dừng chạy tự động).
+    /// PLC chỉ cần bật bit yêu cầu một lần và chờ Bit xong; không cần tự hạ bit yêu cầu. Bit nào để trống thì bỏ qua, nhưng phải có ít nhất một bit báo về.
     /// Chỉ dùng PLC đầu tiên đang kết nối. Vòng đọc chạy ở thread nền; hàm runCycle phải tự chuyển về UI thread nếu cần.
     /// </summary>
     public sealed class PlcAutoRunner : IDisposable
@@ -73,7 +72,6 @@ namespace UI.Services
             string? stopReason = null;
             try
             {
-                bool previous = await plc.ReadBitAsync(trigger, ct);
                 await ClearAsync(plc, bits, ct);
                 int failures = 0;
 
@@ -97,36 +95,37 @@ namespace UI.Services
                         continue;
                     }
 
-                    if (now && !previous)
-                    {
-                        _log($"[tự động] {plcName} yêu cầu chụp ({trigger}=1)");
-                        RunVerdict verdict;
-                        try { verdict = await _runCycle(ct); }
-                        catch (OperationCanceledException) { throw; }
-                        catch (Exception ex)
-                        {
-                            _log($"[tự động - LỖI] {ex.Message}");
-                            verdict = RunVerdict.Error;
-                        }
+                    if (!now) continue;
 
-                        try { await WriteResultAsync(plc, bits, verdict, ct); }
-                        catch (Exception ex) when (ex is not OperationCanceledException)
-                        {
-                            stopReason = $"Không ghi được kết quả về {plcName}: {ex.Message}";
-                            break;
-                        }
-                        _log($"[tự động] Đã báo {plcName}: {verdict}");
-                    }
-                    else if (!now && previous)
+                    // Nhận lệnh: hạ bit yêu cầu về 0 ngay để PLC biết đã nhận, rồi xóa kết quả cũ
+                    try
                     {
-                        try { await ClearAsync(plc, bits, ct); }
-                        catch (Exception ex) when (ex is not OperationCanceledException)
-                        {
-                            _log($"[tự động - LỖI] Không xóa được bit kết quả: {ex.Message}");
-                        }
+                        await plc.WriteBitAsync(trigger, false, ct);
+                        await ClearAsync(plc, bits, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        stopReason = $"Không hạ được bit yêu cầu chụp {trigger} của {plcName}: {ex.Message}";
+                        break;
                     }
 
-                    previous = now;
+                    _log($"[tự động] {plcName} yêu cầu chụp ({trigger}=1, đã hạ về 0)");
+                    RunVerdict verdict;
+                    try { verdict = await _runCycle(ct); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        _log($"[tự động - LỖI] {ex.Message}");
+                        verdict = RunVerdict.Error;
+                    }
+
+                    try { await WriteResultAsync(plc, bits, verdict, ct); }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        stopReason = $"Không ghi được kết quả về {plcName}: {ex.Message}";
+                        break;
+                    }
+                    _log($"[tự động] Đã báo {plcName}: {verdict}");
                 }
             }
             catch (OperationCanceledException) { }

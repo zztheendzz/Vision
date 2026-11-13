@@ -9,11 +9,8 @@
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveCommand}" />
     </Window.InputBindings>
-
-
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-
         <!-- Kiểu bảng tối cho DataGrid (theme chung chưa có) -->
         <Style TargetType="{x:Type DataGrid}">
             <Setter Property="Background" Value="{StaticResource VsPanelBrush}" />
@@ -53,9 +50,7 @@
             </Style.Triggers>
         </Style>
     </Window.Resources>
-
     <DockPanel>
-
         <!-- ================= THANH DƯỚI ================= -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource VsPanelHeaderBrush}"
                 BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
@@ -161,7 +156,6 @@
                     </DataTemplate>
                 </TabControl.ContentTemplate>
             </TabControl>
-
             <!-- ============ KIỂM TRA ĐỊA CHỈ ============ -->
             <Expander Grid.Row="2" Header="Kiểm tra địa chỉ (lỗi, trùng, chồng lên nhau)" IsExpanded="True" Margin="0,8,0,0"
                       Foreground="{StaticResource VsTextBrush}">
@@ -201,7 +195,6 @@
                     </ListBox>
                 </Border>
             </Expander>
-
             <!-- ============ ĐỌC / GHI THỬ ============ -->
             <StackPanel Grid.Row="3" Margin="0,8,0,0">
                 <WrapPanel>
@@ -227,7 +220,4 @@
             </StackPanel>
         </Grid>
     </DockPanel>
-
-
-
 </Window>

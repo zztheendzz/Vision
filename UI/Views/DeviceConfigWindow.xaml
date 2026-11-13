@@ -31,6 +31,8 @@
                     <Button Content="Đóng" Width="90" Style="{StaticResource OutlineButton}"
                             Click="Close_Click" />
                 </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ConnectionAlert}" VerticalAlignment="Center" Margin="12,0"
+                           Foreground="#FF6B6B" FontWeight="Bold" />
                 <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
                            Foreground="{StaticResource VsMutedBrush}" TextTrimming="CharacterEllipsis" />
             </DockPanel>

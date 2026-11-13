@@ -185,7 +185,7 @@ namespace UI.ViewModels.Device
 
                 IsConnected = _owner.Manager.IsConnected(Id);
                 Message = IsConnected ? $"Kết nối thành công ({description})" : "Không kết nối được";
-                if (IsConnected) AttachCamera();
+                if (IsConnected) { _wantConnected = true; AttachCamera(); }
             }
             catch (Exception ex)
             {
@@ -197,6 +197,7 @@ namespace UI.ViewModels.Device
         [RelayCommand]
         private void Disconnect()
         {
+            _wantConnected = false;           // tự ngắt thì không tự nối lại
             DetachCamera();
             _owner.Manager.Disconnect(Id);
             IsConnected = false;
@@ -225,6 +226,38 @@ namespace UI.ViewModels.Device
             }
         }
 
+        // ---------- Tự nối lại ----------
+
+        /// <summary>Thiết bị đã nối thành công và người dùng chưa bấm Ngắt: mất kết nối thì tự nối lại.</summary>
+        private bool _wantConnected;
+        private DateTime _lostAt = DateTime.MinValue;
+        private DateTime _lastAttempt = DateTime.MinValue;
+        private bool _reconnecting;
+
+        /// <summary>
+        /// Gọi định kỳ: thiết bị mất kết nối quá "Tự nối lại sau" giây thì thử nối lại; chưa được thì thử tiếp sau cùng khoảng đó.
+        /// </summary>
+        public async Task AutoReconnectAsync()
+        {
+            if (!_wantConnected || IsConnected || _reconnecting || !Config.Enabled || Config.Type == DeviceType.PC) return;
+
+            string raw = _catalog.GetGroupValueOrDefault(Config.Type, DeviceSchemas.KeyReconnectSec);
+            int seconds = int.TryParse(raw, out int v) ? v : 5;
+            if (seconds <= 0) return;
+
+            var since = _lostAt > _lastAttempt ? _lostAt : _lastAttempt;
+            if ((DateTime.Now - since).TotalSeconds < seconds) return;
+
+            _lastAttempt = DateTime.Now;
+            _reconnecting = true;
+            try
+            {
+                await ConnectAsync();
+                _owner.StatusMessage = IsConnected ? $"{Name} đã tự nối lại" : $"{Name}: tự nối lại chưa được, sẽ thử lại sau {seconds} giây";
+            }
+            finally { _reconnecting = false; }
+        }
+
         /// <summary>Được gọi định kỳ để phát hiện thiết bị tự ngắt kết nối.</summary>
         public void RefreshStatus()
         {
@@ -234,8 +267,17 @@ namespace UI.ViewModels.Device
             IsConnected = alive;
             if (!alive)
             {
+                _lostAt = DateTime.Now;
                 DetachCamera();
                 Message = "Mất kết nối";
+                if (Config.Type == DeviceType.Fixture)
+                {
+                    IsOpen = null;
+                    SensorText = "MẤT KẾT NỐI";
+                    FixtureStateText = "Mất kết nối";
+                    Log("LỖI", $"MẤT KẾT NỐI {Name}: đường truyền bị ngắt");
+                    _owner.StatusMessage = $"Mất kết nối {Name}";
+                }
             }
         }
 
@@ -352,8 +394,59 @@ namespace UI.ViewModels.Device
             Message = reply.Accepted ? reply.Raw : reply.Error ?? "Lệnh điều khiển thất bại";
         }
 
-        [RelayCommand] private Task TakeControlAsync() => ControlAsync(r => r.TakeControlAsync(stopAndReset: true));
-        [RelayCommand] private Task ReleaseControlAsync() => ControlAsync(r => r.ReleaseControlAsync());
+        // ---------- Quyền điều khiển robot giữa PLC và app ----------
+        // Một bit trên PLC nguồn (mặc định M305): 1 = PLC điều khiển robot, 0 = app điều khiển robot.
+
+        private string AuthorityBit => Config.GetString("IoEnaBit").Trim();
+
+        /// <summary>Ghi bit quyền (false = app giữ quyền, true = trả PLC). Không có PLC nguồn / chưa đặt địa chỉ thì bỏ qua.</summary>
+        private async Task<string?> WriteAuthorityAsync(bool plcControls)
+        {
+            string bit = AuthorityBit;
+            var plc = _owner.Manager.PlcFor(Config);
+            if (bit.Length == 0 || plc == null) return null;
+            try
+            {
+                await plc.WriteBitAsync(bit, plcControls);
+                return $"bit quyền {bit} = {(plcControls ? 1 : 0)} ({(plcControls ? "PLC" : "app")} điều khiển)";
+            }
+            catch (Exception ex) { return $"không ghi được bit quyền {bit}: {ex.Message}"; }
+        }
+
+        /// <summary>Trước khi app điều khiển robot: nếu PLC đang giữ quyền (bit = 1) thì từ chối. Không có PLC / không đặt bit thì cho qua.</summary>
+        private async Task<bool> EnsureAppControlAsync()
+        {
+            string bit = AuthorityBit;
+            var plc = _owner.Manager.PlcFor(Config);
+            if (bit.Length == 0 || plc == null) return true;
+            try
+            {
+                if (!await plc.ReadBitAsync(bit)) return true;
+                Message = $"PLC đang điều khiển robot ({bit} = 1). Bấm 'Chiếm quyền' để app điều khiển";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Message = $"Không đọc được bit quyền {bit}: {ex.Message}";
+                return false;
+            }
+        }
+
+        [RelayCommand]
+        private async Task TakeControlAsync()
+        {
+            await ControlAsync(r => r.TakeControlAsync(stopAndReset: true));
+            string? note = await WriteAuthorityAsync(plcControls: false);
+            if (note != null) Message += "; " + note;
+        }
+
+        [RelayCommand]
+        private async Task ReleaseControlAsync()
+        {
+            await ControlAsync(r => r.ReleaseControlAsync());
+            string? note = await WriteAuthorityAsync(plcControls: true);
+            if (note != null) Message += "; " + note;
+        }
         [RelayCommand] private Task StopAndResetAsync() => ControlAsync(r => r.StopAndResetAsync());
         [RelayCommand] private Task ServoOnAsync() => ControlAsync(r => r.SetServoAsync(true));
         [RelayCommand] private Task ServoOffAsync() => ControlAsync(r => r.SetServoAsync(false));
@@ -405,6 +498,7 @@ namespace UI.ViewModels.Device
         private async Task MoveToCoordinatesAsync()
         {
             if (!TryGetRobot(out var robot)) return;
+            if (!await EnsureAppControlAsync()) return;
 
             // Chưa điền các ô từ robot thì điền sẵn rồi dừng, để không gửi nhầm đích Z = 0
             // Người dùng tự gõ số vào các ô thì coi như đã nhập (cờ giữ mặc định 7,0 nếu chưa điền từ robot)
@@ -438,6 +532,7 @@ namespace UI.ViewModels.Device
         private async Task GoToPointAsync()
         {
             if (!TryGetRobot(out var robot)) return;
+            if (!await EnsureAppControlAsync()) return;
             string name = (SelectedPoint ?? "").Trim();
             if (name.Length == 0) { Message = "Chọn một điểm trong danh sách trước (bấm 'Đọc danh sách điểm')"; return; }
 
@@ -507,6 +602,7 @@ namespace UI.ViewModels.Device
         {
             if (string.IsNullOrEmpty(axis) || axis.Length != 2) return;
             if (!TryGetRobot(out var robot)) return;
+            if (!await EnsureAppControlAsync()) return;
 
             double sign = axis[1] == '-' ? -1 : 1;
             double dx = 0, dy = 0, dz = 0, drz = 0;
@@ -790,7 +886,10 @@ namespace UI.ViewModels.Device
             finally { FixtureBusy = false; }
         }
 
-        private async Task SendFixtureCommandAsync(ITransport transport, FixtureCommand command)
+        // CHECKSENSOR chỉ gửi khi bấm nút hoặc trước khi đóng khuôn lúc chạy tự động; không kiểm tra liên tục.
+        private bool _quietPoll;     // giữ cho Log() (không còn dùng để nén nhật ký)
+
+        private async Task SendFixtureCommandAsync(ITransport transport, FixtureCommand command, int timeoutMs = 5000)
         {
             var protocol = Protocol;
             int ss = FixtureNo;
@@ -798,9 +897,57 @@ namespace UI.ViewModels.Device
             Message = $"Gửi: {text}";
             Log("GỬI", text);
 
-            string reply = await transport.RequestAsync(text, 5000);
-            Log("NHẬN", reply);
-            ApplyFixtureReply(command, reply, ss, protocol);
+            // Khuôn có thể trả lời trên chính kết nối lệnh, hoặc gửi về "Cổng nhận" (TCP Split): cái nào đến trước thì dùng
+            _pendingCommand = command;
+            var fromListener = _replyFromListener = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            try
+            {
+                var request = transport.RequestAsync(text, timeoutMs);
+                if (await Task.WhenAny(request, fromListener.Task) == fromListener.Task)
+                {
+                    _ = request.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);   // yêu cầu bỏ dở, nuốt lỗi quá hạn
+                    return;                                          // dòng trả lời đã được ghi nhật ký và áp dụng ở cổng nhận
+                }
+
+                string reply = await request;
+                Log("NHẬN", reply);
+                ApplyFixtureReply(command, reply, ss, protocol);
+            }
+            finally
+            {
+                _pendingCommand = null;
+                _replyFromListener = null;
+            }
+        }
+
+        private FixtureCommand? _pendingCommand;
+        private TaskCompletionSource<string>? _replyFromListener;
+
+        /// <summary>
+        /// Dòng nhận được ở "Cổng nhận" có phải trả lời lệnh của khuôn này không (OPEN_01_OK, CLOSE_01_ERROR, YES_01, OPENED_01,
+        /// OPEN_ALL_OK...). Khớp thì cập nhật như khi trả lời đến trên kết nối lệnh. Gọi trên luồng giao diện.
+        /// </summary>
+        public bool TryApplyReply(string line)
+        {
+            var protocol = Protocol;
+            int ss = FixtureNo;
+
+            var order = new List<FixtureCommand>();
+            if (_pendingCommand is { } pending) order.Add(pending);          // lệnh đang chờ trả lời thì thử trước
+            order.AddRange(Enum.GetValues<FixtureCommand>().Where(c => !order.Contains(c)));
+
+            foreach (var command in order)
+            {
+                bool matched = command == FixtureCommand.CheckSensor
+                    ? protocol.InterpretSensor(line, ss, Slots.Count).Matched
+                    : protocol.Interpret(command, line, ss).Matched;
+                if (!matched) continue;
+
+                ApplyFixtureReply(command, line, ss, protocol);
+                _replyFromListener?.TrySetResult(line);
+                return true;
+            }
+            return false;
         }
 
         // ---------- Khóa an toàn đóng / mở (chỉ cho chạy tự động; bấm tay không bị chặn) ----------
@@ -973,7 +1120,11 @@ namespace UI.ViewModels.Device
                 Log(text.Contains("lỗi", StringComparison.OrdinalIgnoreCase) || text.Contains("nhưng đọc lại") ? "LỖI" : "PLC", text);
             });
 
-        private void Log(string kind, string text) => _owner.AddFixtureLog(Name, kind, text);
+        private void Log(string kind, string text)
+        {
+            if (_quietPoll && kind != "LỖI") return;          // kiểm tra định kỳ: chỉ ghi nhật ký khi có lỗi
+            _owner.AddFixtureLog(Name, kind, text);
+        }
 
         private async Task WriteSlotResultToPlcAsync(int slotNumber, SlotState state)
         {

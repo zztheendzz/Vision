@@ -62,6 +62,12 @@ namespace Communication.Configuration
 
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
+        /// <summary>Ô chung cho mọi loại thiết bị: sau bao lâu tự nối lại khi mất kết nối (0 = không tự nối).</summary>
+        public const string KeyReconnectSec = "ReconnectSec";
+        private static FieldDef ReconnectField(int seconds = 5)
+            => Int(KeyReconnectSec, "Tự nối lại sau (giây, 0 = tắt)", seconds, 0, 3600, "Chung",
+                   "Thiết bị đang nối mà mất kết nối thì sau chừng này giây tự nối lại, lặp lại tới khi nối được. Thiết bị tự bấm Ngắt kết nối thì không tự nối.");
+
         private static FieldDef Int(string key, string label, int def, double min, double max, string section = "", string hint = "")
             => new(key, label, FieldKind.Integer, def.ToString(), section, Min: min, Max: max, Hint: hint);
         /// <summary>Các lệnh gửi khuôn test: khóa, tên hiển thị, mẫu gửi, mẫu trả lời 1 (OK/YES/OPENED), mẫu trả lời 2 (ERROR/NO/CLOSED).</summary>
@@ -129,6 +135,7 @@ namespace Communication.Configuration
             {
                 Type = DeviceType.Camera, DisplayName = "Camera", NamePrefix = "Camera",
                 HasPlcSource = true, DefaultEnabled = false,
+                GroupFields = new[] { ReconnectField() },
                 DeviceFields = new[]
                 {
                     Choice("Protocol", "Giao thức truyền thông", GigE, new[] { GigE, Simulated }, "Kết nối"),
@@ -155,6 +162,7 @@ namespace Communication.Configuration
                 HasPlcSource = true, DefaultEnabled = false,
                 GroupFields = new[]
                 {
+                    ReconnectField(),
                     Choice(KeyMode, "Chế độ", Simulated, new[] { Simulated, "TCP Client", "Serial" }, "Chung"),
                     Term(KeyTx, "Ký tự kết thúc TX"),
                     Term(KeyRx, "Ký tự kết thúc RX"),
@@ -178,6 +186,7 @@ namespace Communication.Configuration
                 // PLC Mitsubishi qua HslCommunication (giao thức MC)
                 Type = DeviceType.PLC, DisplayName = "PLC", NamePrefix = "PLC",
                 HasPlcSource = false, DefaultEnabled = true,
+                GroupFields = new[] { ReconnectField() },
                 DeviceFields = new[]
                 {
                     Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, MxComponent, Simulated }, "Kết nối"),
@@ -198,13 +207,17 @@ namespace Communication.Configuration
                     Addr("ErrorBit", "Bit Error", "I693"),
                     Addr("PickOnlyBit", "Bit pick-only", ""),
                     Addr("GDecodeReg", "G-Decode Reg", ""),
-                    Addr("CameraTrigger", "Bit PLC yêu cầu chụp", ""),
+                    Addr("CameraTrigger", "Bit PLC yêu cầu chụp (app đọc thấy 1 thì tự về 0)", "M601"),
                     Addr("DoneBit", "Bit vision xong (báo PLC)", ""),
                     Addr("OkBit", "Bit kết quả OK (báo PLC)", ""),
                     Addr("NgBit", "Bit kết quả NG (báo PLC)", ""),
                     Addr("VisionErrBit", "Bit lỗi vision (báo PLC)", ""),
                     Addr("FovReg", "Thanh ghi FOV", "D600"),
                     Addr("RunBit", "Bit chạy", "L1000"),
+                    Addr("RobotLostBit", "Bit báo mất kết nối robot (1 = mất)", ""),
+                    Addr("CameraLostBit", "Bit báo mất kết nối camera (1 = mất)", ""),
+                    Addr("ScannerLostBit", "Bit báo mất kết nối scanner (1 = mất)", ""),
+                    Addr("FixtureLostBit", "Bit báo mất kết nối khuôn test (1 = mất)", ""),
                 }
             },
             new()
@@ -212,6 +225,7 @@ namespace Communication.Configuration
                 // Robot Mitsubishi MELFA qua Melfa.Robot (R-protocol)
                 Type = DeviceType.Robot, DisplayName = "Robot", NamePrefix = "Robot",
                 HasPlcSource = true, DefaultEnabled = true,
+                GroupFields = new[] { ReconnectField() },
                 DeviceFields = new[]
                 {
                     Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, Simulated }, "Kết nối"),
@@ -251,7 +265,7 @@ namespace Communication.Configuration
                     Num("MaxOffsetDeg", "Giới hạn gửi góc (độ)", "30", 0.1, 360, "An toàn"),
                     Num("MaxMoveMm", "Giới hạn di chuyển tới tọa độ (mm)", "300", 1, 5000, "An toàn",
                         "Từ chối di chuyển nếu đích cách vị trí hiện tại xa hơn số này"),
-                    Addr("IoEnaBit", "IOENA", "M305"),
+                    Addr("IoEnaBit", "Bit quyền điều khiển robot (1 = PLC, 0 = App)", "M305"),
                     Txt("Model3d", "Model 3D", "", "Hiển thị", "Đường dẫn file model"),
                 }
             },
@@ -261,6 +275,7 @@ namespace Communication.Configuration
                 HasPlcSource = true, DefaultEnabled = true,
                 GroupFields = new[]
                 {
+                    ReconnectField(),
                     Choice(KeyMode, "Chế độ", "TCP Split", new[] { Simulated, "TCP", "TCP Split" }, "Chung"),
                     Choice("OpenKind", "Kiểu mở khuôn test", "Mở ngay", new[] { "Mở ngay", "Mở sau khi có kết quả" }, "Chung"),
                     Bool("OnlyFail", "Only Fail", false, "Chung"),

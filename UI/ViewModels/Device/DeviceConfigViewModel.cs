@@ -61,6 +61,75 @@ namespace UI.ViewModels.Device
             else dispatcher.BeginInvoke(Add);
         }
 
+        // ---------- Mất kết nối: báo ra màn hình và báo PLC bằng bit ----------
+
+        /// <summary>Dòng cảnh báo các thiết bị bật mà đang không nối được (rỗng = bình thường). Hiện ở thanh trạng thái.</summary>
+        [ObservableProperty] private string _connectionAlert = "";
+
+        private static readonly (DeviceType Type, string Field)[] LostBits =
+        {
+            (DeviceType.Robot, "RobotLostBit"), (DeviceType.Camera, "CameraLostBit"),
+            (DeviceType.Scanner, "ScannerLostBit"), (DeviceType.Fixture, "FixtureLostBit"),
+        };
+
+        private readonly Dictionary<string, bool> _lostWritten = new();   // "plcId|địa chỉ" → giá trị đã ghi
+        private HashSet<Guid> _lostIds = new();
+        private bool _lostBusy;
+
+        /// <summary>
+        /// Thiết bị bật mà không nối (hoặc khuôn test không trả lời) coi là mất kết nối: hiện cảnh báo,
+        /// và ghi bit tương ứng của loại đó lên PLC (1 = mất, 0 = bình thường). Chỉ ghi khi giá trị đổi; PLC nối lại thì ghi lại.
+        /// </summary>
+        private async Task ReportLostAsync()
+        {
+            if (_lostBusy) return;
+            _lostBusy = true;
+            try
+            {
+                var lost = Devices.Where(d => d.Config.Type != DeviceType.PC && d.Enabled && !d.IsConnected).ToList();
+                var ids = lost.Select(d => d.Id).ToHashSet();
+
+                foreach (var d in lost.Where(d => !_lostIds.Contains(d.Id)))
+                {
+                    string text = $"MẤT KẾT NỐI {d.Name}";
+                    StatusMessage = text;
+                    if (d.Config.Type != DeviceType.Fixture) AddFixtureLog(d.Name, "LỖI", text);
+                }
+                foreach (var d in Devices.Where(d => _lostIds.Contains(d.Id) && !ids.Contains(d.Id)))
+                    StatusMessage = $"{d.Name} đã nối lại";
+                _lostIds = ids;
+
+                ConnectionAlert = lost.Count == 0 ? "" : "⚠ Mất kết nối: " + string.Join(", ", lost.Select(d => d.Name));
+
+                var plcs = Manager.ConnectedPlcs();
+                var plcIds = plcs.Select(p => p.Config.Id).ToHashSet();
+                foreach (string key in _lostWritten.Keys.Where(k => !plcIds.Contains(Guid.Parse(k.Split('|')[0]))).ToList())
+                    _lostWritten.Remove(key);                      // PLC vừa mất / nối lại: ghi lại từ đầu
+
+                foreach (var (cfg, plc) in plcs)
+                    foreach (var (type, field) in LostBits)
+                    {
+                        string address = cfg.GetString(field).Trim();
+                        if (address.Length == 0) continue;
+
+                        bool value = lost.Any(d => d.Config.Type == type);
+                        string key = $"{cfg.Id}|{address}";
+                        if (_lostWritten.TryGetValue(key, out bool last) && last == value) continue;
+                        try
+                        {
+                            await plc.WriteBitAsync(address, value);
+                            _lostWritten[key] = value;
+                            AddFixtureLog(cfg.Name, "PLC", $"Báo mất kết nối {type}: {address} = {(value ? 1 : 0)}");
+                        }
+                        catch (Exception ex)
+                        {
+                            AddFixtureLog(cfg.Name, "LỖI", $"Không ghi được bit mất kết nối {address}: {ex.Message}");
+                        }
+                    }
+            }
+            finally { _lostBusy = false; }
+        }
+
         // ---------- Cổng nhận của khuôn test ----------
 
         /// <summary>Tình trạng cổng nhận, hiện ở tab Khuôn test: đang nghe, hoặc lý do chưa mở.</summary>
@@ -133,8 +202,11 @@ namespace UI.ViewModels.Device
             void Handle()
             {
                 AddFixtureLog("Cổng nhận", "NHẬN", $"{remote}: {line}");
-                bool handled = Devices.Where(d => d.Config.Type == DeviceType.Fixture).Any(d => d.ApplyLine(line));
-                if (!handled) AddFixtureLog("Cổng nhận", "INFO", "Dòng này không khớp mẫu kết quả nào hoặc số khuôn không có trong danh sách");
+                var fixtures = Devices.Where(d => d.Config.Type == DeviceType.Fixture).ToList();
+                bool handled = fixtures.Any(d => d.ApplyLine(line));                 // kết quả slot: P_01_02...
+                if (!handled)
+                    foreach (var d in fixtures) handled |= d.TryApplyReply(line);    // trả lời lệnh: OPEN_01_OK, YES_01, OPENED_01, OPEN_ALL_OK...
+                if (!handled) AddFixtureLog("Cổng nhận", "INFO", "Dòng này không khớp mẫu kết quả hay trả lời lệnh nào, hoặc số khuôn không có trong danh sách");
             }
 
             if (dispatcher == null || dispatcher.CheckAccess()) Handle();
@@ -186,6 +258,8 @@ namespace UI.ViewModels.Device
             {
                 SyncFixtureListener();
                 foreach (var d in Devices) d.RefreshStatus();
+                foreach (var d in Devices) _ = d.AutoReconnectAsync();
+                _ = ReportLostAsync();
             };
             _timer.Start();
             SyncFixtureListener();
