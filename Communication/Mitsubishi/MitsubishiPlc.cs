@@ -11,7 +11,7 @@ namespace Communication.Mitsubishi
     /// CHƯA biên dịch / chạy thử với thư viện thật: nếu tên lớp hoặc namespace khác, chỉ sửa trong file này.
     /// Địa chỉ dạng "M303", "D600"... Thư viện HSL bản mới có thể cần mã kích hoạt (license).
     /// </summary>
-    public sealed class MitsubishiPlc : IPlcDriver
+    public sealed class MitsubishiPlc : IPlcDriver, IProbeable
     {
         private readonly string _ip;
         private readonly int _port;
@@ -33,6 +33,22 @@ namespace Communication.Mitsubishi
             d.GetInt(DeviceSchemas.KeyTimeoutMs, 3000));
 
         public bool IsConnected => _connected;
+
+        /// <summary>Đọc thử bit M0 để biết PLC còn trả lời không (rút dây mạng thì đọc thất bại).</summary>
+        public async Task<string?> ProbeAsync(CancellationToken ct = default)
+        {
+            if (!_connected) return null;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(_timeoutMs + 1000);
+                await ReadBitAsync("M0", cts.Token).ConfigureAwait(false);
+                return null;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return "PLC không trả lời"; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { return ex.Message; }
+        }
+
         public string Description => $"Mitsubishi MC {_ip}:{_port} ({(_ascii ? "Ascii" : "Binary")})";
 
         public Task ConnectAsync(CancellationToken ct = default) => Task.Run(() =>

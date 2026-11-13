@@ -47,7 +47,64 @@ namespace Communication.Camera
         /// </summary>
         public bool IsConnected
         {
-            get { lock (_lockObj) { return _hAcqHandle != null; } }
+            get { lock (_lockObj) { return _hAcqHandle != null && !_linkLost; } }
+        }
+
+        // ---------- Phát hiện mất kết nối (rút dây mạng, camera tắt nguồn) ----------
+        // Có handle chưa chắc camera còn sống: HALCON giữ handle cho tới khi ta đóng. Nên có ba nguồn báo mất:
+        //  1. vòng chụp gặp lỗi không phải "timeout"; 2. chế độ chụp liên tục mà quá LiveTimeoutSeconds không có ảnh;
+        //  3. luồng giám sát 2 giây/lần đọc thử vài thông số của camera, đọc cái nào cũng lỗi.
+
+        private volatile bool _linkLost;
+        private System.Threading.Timer _watchdog;
+        private DateTime _lastFrameUtc = DateTime.UtcNow;
+
+        /// <summary>Lý do mất kết nối gần nhất (rỗng nếu còn nối).</summary>
+        public string LostReason { get; private set; } = "";
+
+        /// <summary>> 0: đang chụp liên tục mà quá chừng này giây không có ảnh thì coi là mất kết nối. 0 = không dùng (chế độ trigger).</summary>
+        public int LiveTimeoutSeconds { get; set; }
+
+        private void MarkLost(string reason)
+        {
+            if (_linkLost) return;
+            LostReason = reason;
+            _linkLost = true;
+            OnError?.Invoke(this, "Mất kết nối camera: " + reason);
+        }
+
+        private static readonly string[] ProbeParams = { "Width", "Height", "PixelFormat", "ExposureTime" };
+
+        private void WatchdogTick()
+        {
+            if (_linkLost || _disposed) return;
+
+            if (LiveTimeoutSeconds > 0 && _isGrabbing && (DateTime.UtcNow - _lastFrameUtc).TotalSeconds > LiveTimeoutSeconds)
+            {
+                MarkLost($"không nhận được ảnh trong {LiveTimeoutSeconds} giây");
+                return;
+            }
+
+            if (!System.Threading.Monitor.TryEnter(_lockObj, 300)) return;     // đang bận việc khác: bỏ lượt này
+            try
+            {
+                if (_hAcqHandle == null) return;
+                string lastError = "";
+                foreach (string name in ProbeParams)
+                {
+                    try { HOperatorSet.GetFramegrabberParam(_hAcqHandle, name, out _); return; }   // đọc được một cái là còn sống
+                    catch (HalconException ex) { lastError = ex.Message; }
+                }
+                MarkLost("camera không trả lời (" + lastError + ")");
+            }
+            finally { System.Threading.Monitor.Exit(_lockObj); }
+        }
+
+        private void StartWatchdog()
+        {
+            _lastFrameUtc = DateTime.UtcNow;
+            _watchdog?.Dispose();
+            _watchdog = new System.Threading.Timer(_ => { try { WatchdogTick(); } catch { } }, null, 2000, 2000);
         }
 
         /// <summary>Camera có đang chụp liên tục không.</summary>
@@ -152,12 +209,15 @@ namespace Communication.Camera
         {
             // Ngắt kết nối cũ NGOÀI khối lock (vì bên trong Disconnect -> StopGrabbing có gọi Task.Wait,
             // nếu giữ lock sẽ dẫn đến tình trạng GrabLoop bị kẹt không lấy được lock -> gây treo ứng dụng).
-            if (IsConnected) Disconnect();
+            bool hasOldHandle; lock (_lockObj) { hasOldHandle = _hAcqHandle != null; }
+            if (hasOldHandle) Disconnect();
 
             lock (_lockObj)
             {
                 try
                 {
+                    _linkLost = false;
+                    LostReason = "";
                     string deviceToOpen = string.IsNullOrEmpty(cameraName) ? "default" : cameraName;
 
                     // Mở kết nối Framegrabber với giao thức GigEVision2
@@ -176,6 +236,7 @@ namespace Communication.Camera
                         out _hAcqHandle
                     );
 
+                    StartWatchdog();
                     return true;
                 }
                 catch (HalconException ex)
@@ -212,6 +273,9 @@ namespace Communication.Camera
         /// </summary>
         public void Disconnect()
         {
+            _watchdog?.Dispose();
+            _watchdog = null;
+
             // Dừng chụp ảnh trước khi đóng kết nối
             StopGrabbing();
 
@@ -240,6 +304,7 @@ namespace Communication.Camera
                 // Nếu chưa kết nối hoặc đang chụp rồi thì bỏ qua
                 if (_hAcqHandle == null || _isGrabbing) return;
 
+                _lastFrameUtc = DateTime.UtcNow;
                 _cts = new CancellationTokenSource();
                 _isGrabbing = true;
 
@@ -293,6 +358,7 @@ namespace Communication.Camera
 
                     if (image != null && image.IsInitialized())
                     {
+                        _lastFrameUtc = DateTime.UtcNow;
                         // Mỗi người nhận sự kiện được một bản Clone RIÊNG (người nhận tự Dispose bản của mình), để
                         // nhiều nơi cùng nghe (xem trước, chạy đồ thị...) mà không Dispose nhầm ảnh của nhau.
                         var handlers = OnImageGrabbed;
@@ -320,7 +386,7 @@ namespace Communication.Camera
                     if (ex.Message.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0)
                         continue;
 
-                    OnError?.Invoke(this, $"Lỗi trong quá trình Grab: {ex.Message}");
+                    MarkLost("lỗi khi chụp: " + ex.Message);
                     break;
                 }
                 catch (Exception ex)
@@ -797,5 +863,6 @@ namespace Communication.Camera
         }
 
         #endregion
-    }
+
+    } 
 }

@@ -17,7 +17,7 @@ namespace Communication.Mitsubishi
     /// Đặt MxBridge.exe cạnh file chạy chính, hoặc trong thư mục con MxBridge\ .
     /// Chưa chạy thử với MX Component thật.
     /// </summary>
-    public sealed class MitsubishiMxPlc : IPlcDriver
+    public sealed class MitsubishiMxPlc : IPlcDriver, IProbeable
     {
         private const int OpenTimeoutMs = 15000;
         private const int CommandTimeoutMs = 5000;
@@ -32,6 +32,20 @@ namespace Communication.Mitsubishi
         public static MitsubishiMxPlc FromConfig(DeviceConfig d) => new(d.GetInt("StationNo", 1));
 
         public bool IsConnected => _connected && _bridge is { HasExited: false };
+
+        public async Task<string?> ProbeAsync(CancellationToken ct = default)
+        {
+            if (!_connected) return null;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(CommandTimeoutMs + 1000);
+                await ReadBitAsync("M0", cts.Token).ConfigureAwait(false);
+                return null;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return "PLC không trả lời"; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { return ex.Message; }
+        }
         public string Description => $"MX Component trạm {_station} (qua MxBridge x86)";
 
         public async Task ConnectAsync(CancellationToken ct = default)

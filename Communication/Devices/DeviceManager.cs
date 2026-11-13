@@ -42,6 +42,60 @@ namespace Communication.Drivers
             foreach (var l in all) { try { l.Disconnect(); } catch { } l.Dispose(); }
         }
 
+        // ---------- Phát hiện thiết bị mất kết nối ----------
+
+        private readonly Dictionary<Guid, int> _probeFailures = new();
+        private readonly Dictionary<Guid, string> _lostReasons = new();
+        private int _probing;
+
+        /// <summary>Lý do thiết bị bị ngắt gần nhất do mất kết nối (rỗng nếu không có).</summary>
+        public string LostReason(Guid id)
+        {
+            lock (_gate) return _lostReasons.TryGetValue(id, out var r) ? r : "";
+        }
+
+        /// <summary>
+        /// Kiểm tra từng thiết bị đang nối (đọc thử một giá trị nhẹ). Hai lần liên tiếp không trả lời thì ngắt thiết bị đó:
+        /// IsConnected thành false, giao diện báo mất kết nối và cơ chế tự nối lại làm việc. Gọi định kỳ; đang chạy dở thì bỏ lượt.
+        /// </summary>
+        public async Task ProbeAllAsync()
+        {
+            if (Interlocked.Exchange(ref _probing, 1) == 1) return;
+            try
+            {
+                await ProbeCoreAsync().ConfigureAwait(false);
+            }
+            catch { /* kiểm tra không bao giờ được làm hỏng chương trình */ }
+            finally { Interlocked.Exchange(ref _probing, 0); }
+        }
+
+        private async Task ProbeCoreAsync()
+        {
+            {
+                List<(Guid Id, IDeviceLink Link)> snapshot;
+                lock (_gate) snapshot = _links.Where(p => p.Value is IProbeable).Select(p => (p.Key, p.Value)).ToList();
+
+                await Task.WhenAll(snapshot.Select(async item =>
+                {
+                    string? error;
+                    try { error = item.Link.IsConnected ? await ((IProbeable)item.Link).ProbeAsync().ConfigureAwait(false) : "đã ngắt"; }
+                    catch (Exception ex) { error = ex.Message; }
+
+                    int failures;
+                    lock (_gate)
+                    {
+                        if (error == null) { _probeFailures.Remove(item.Id); _lostReasons.Remove(item.Id); return; }
+                        _probeFailures[item.Id] = failures = (_probeFailures.TryGetValue(item.Id, out int n) ? n : 0) + 1;
+                    }
+                    if (failures < 2) return;
+
+                    lock (_gate) { _lostReasons[item.Id] = error; _probeFailures.Remove(item.Id); }
+                    // Đóng thư viện thiết bị đứt dây có thể treo hoặc ném lỗi: làm ở luồng riêng và nuốt lỗi
+                    try { await Task.Run(() => Disconnect(item.Id)).ConfigureAwait(false); } catch { }
+                })).ConfigureAwait(false);
+            }
+        }
+
         public bool IsConnected(Guid id) => GetLink(id)?.IsConnected == true;
 
         public IDeviceLink? GetLink(Guid id)

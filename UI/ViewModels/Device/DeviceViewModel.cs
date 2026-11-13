@@ -269,7 +269,8 @@ namespace UI.ViewModels.Device
             {
                 _lostAt = DateTime.Now;
                 DetachCamera();
-                Message = "Mất kết nối";
+                string why = _owner.Manager.LostReason(Id);
+                Message = why.Length > 0 ? "Mất kết nối: " + why : "Mất kết nối";
                 if (Config.Type == DeviceType.Fixture)
                 {
                     IsOpen = null;
@@ -734,6 +735,7 @@ namespace UI.ViewModels.Device
             DetachCamera();
             _camera = _owner.Manager.GetLink(Id) as HalconCamera;
             if (_camera == null) return;
+            _camera.LiveTimeoutSeconds = Config.GetString("Trigger") == "Liên tục" ? 5 : 0;   // chụp liên tục mà 5 giây không có ảnh = mất camera
             _camera.OnImageGrabbed += OnFrame;
             _camera.OnError += OnCameraError;
             _ = ReadCameraParamsAsync();               // nạp khoảng giá trị và giá trị thật của camera vào thanh trượt

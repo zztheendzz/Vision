@@ -258,6 +258,7 @@ namespace UI.ViewModels.Device
             {
                 SyncFixtureListener();
                 foreach (var d in Devices) d.RefreshStatus();
+                _ = Manager.ProbeAllAsync();
                 foreach (var d in Devices) _ = d.AutoReconnectAsync();
                 _ = ReportLostAsync();
             };

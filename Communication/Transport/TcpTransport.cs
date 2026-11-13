@@ -5,7 +5,7 @@ using Communication.Drivers;
 namespace Communication.Transport
 {
     /// <summary>TCP client có tách khung theo ký tự kết thúc. Mỗi lúc chỉ một yêu cầu (SemaphoreSlim).</summary>
-    public sealed class TcpTransport : ITransport
+    public sealed class TcpTransport : ITransport, IProbeable
     {
         private readonly TcpOptions _opt;
         private readonly SemaphoreSlim _lock = new(1, 1);
@@ -17,6 +17,22 @@ namespace Communication.Transport
 
         public bool IsConnected => _client?.Connected == true;
         public string Description => $"TCP {_opt.Host}:{_opt.Port}";
+
+        /// <summary>Phía bên kia đóng hoặc đường truyền đứt thì ổ cắm báo "đọc được" mà không có dữ liệu.</summary>
+        public Task<string?> ProbeAsync(CancellationToken ct = default)
+        {
+            var client = _client;
+            if (client == null) return Task.FromResult<string?>(null);
+            try
+            {
+                var sock = client.Client;
+                if (sock.Poll(0, System.Net.Sockets.SelectMode.SelectError)) return Task.FromResult<string?>("lỗi đường truyền");
+                if (sock.Poll(0, System.Net.Sockets.SelectMode.SelectRead) && sock.Available == 0)
+                    return Task.FromResult<string?>("phía bên kia đã đóng kết nối");
+                return Task.FromResult<string?>(null);
+            }
+            catch (Exception ex) { return Task.FromResult<string?>(ex.Message); }
+        }
 
         public async Task ConnectAsync(CancellationToken ct = default)
         {
@@ -38,6 +54,16 @@ namespace Communication.Transport
                 client.Dispose();
                 throw;
             }
+            try
+            {
+                // Giữ nhịp (keepalive): rút dây mạng thì sau ~11 giây hệ điều hành đóng ổ cắm, ProbeAsync mới thấy
+                var sock = client.Client;
+                sock.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 5);
+                sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 2);
+                sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3);
+            }
+            catch { /* hệ điều hành không hỗ trợ: bỏ qua */ }
             _client = client;
             _stream = client.GetStream();
             _buffer.Clear();

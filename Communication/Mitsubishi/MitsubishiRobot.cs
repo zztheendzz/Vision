@@ -13,13 +13,13 @@ namespace Communication.Mitsubishi
     /// "Accepted" chỉ có nghĩa là lệnh đã gửi mà không lỗi, KHÔNG có nghĩa robot đã thực hiện xong.
     /// Độ bù được ghi vào một biến điểm trung gian; điểm đã bù có thể ghi đè lên điểm đã chọn. Các lệnh ghi điểm (P1=(...)(...)) và cách đọc điểm CHƯA kiểm chứng trên robot thật; lệnh NG mặc định để trống (báo lỗi, không gửi bừa).
     /// </summary>
-    public sealed class MitsubishiRobot : IRobotDriver
+    public sealed class MitsubishiRobot : IRobotDriver, IProbeable
     {
         public sealed record Settings(
             string Ip, int Port, int RobotNo, string ClientName, bool EnableOnConnect,
             string RejectTemplate, double MaxOffsetMm, double MaxOffsetDeg,
             RobotPointSettings Points, int PointCount = 20, string PointProgram = "", bool TakeControlOnConnect = false,
-            double MaxMoveMm = 1000);
+            double MaxMoveMm = 300);
 
         private readonly Settings _s;
         private readonly SemaphoreSlim _lock = new(1, 1);
@@ -115,8 +115,8 @@ namespace Communication.Mitsubishi
                 double dx = target.X - now.Point.X, dy = target.Y - now.Point.Y, dz = target.Z - now.Point.Z;
                 double distance = Math.Sqrt(dx * dx + dy * dy + dz * dz);
                 distanceText = $" (cách {distance:0.#} mm)";
-                //if (enforceDistanceLimit && distance > _s.MaxMoveMm)
-                //    return RobotReply.Fail($"Đích cách vị trí hiện tại {distance:0.#} mm, vượt giới hạn {_s.MaxMoveMm:0.#} mm, không di chuyển.");
+                if (enforceDistanceLimit && distance > _s.MaxMoveMm)
+                    return RobotReply.Fail($"Đích cách vị trí hiện tại {distance:0.#} mm, vượt giới hạn {_s.MaxMoveMm:0.#} mm, không di chuyển.");
             }
             else if (enforceDistanceLimit)
             {
@@ -197,6 +197,34 @@ namespace Communication.Mitsubishi
         }
 
         public bool IsConnected => _connected;
+
+        /// <summary>
+        /// Kiểm tra robot còn trên mạng không bằng ping, không được thì thử mở ổ cắm tới cổng robot. KHÔNG gọi thư viện Melfa.Robot
+        /// (thư viện đang bị rút dây giữa chừng có thể ném lỗi ở luồng riêng của nó và làm sập chương trình).
+        /// </summary>
+        public async Task<string?> ProbeAsync(CancellationToken ct = default)
+        {
+            if (!_connected) return null;
+            string ip = _s.Ip;
+            try
+            {
+                using var ping = new System.Net.NetworkInformation.Ping();
+                var reply = await ping.SendPingAsync(ip, 1500).ConfigureAwait(false);
+                if (reply.Status == System.Net.NetworkInformation.IPStatus.Success) return null;
+            }
+            catch (Exception) { /* thử bằng ổ cắm bên dưới */ }
+
+            try
+            {
+                using var client = new System.Net.Sockets.TcpClient();
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(1500);
+                await client.ConnectAsync(ip, _s.Port, cts.Token).ConfigureAwait(false);
+                return null;
+            }
+            catch (Exception) { return $"robot {ip} không trả lời (ping và cổng {_s.Port})"; }
+        }
+
         public string Description => $"Mitsubishi MELFA {_s.Ip}:{_s.Port}";
 
         // ---------- Logic của mình (không phụ thuộc thư viện) ----------

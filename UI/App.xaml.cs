@@ -1,35 +1,47 @@
 ﻿using System.Configuration;
 using System.Data;
+using System.IO;
 using System.Windows;
+using System.Windows.Threading;
+using Vision.Tools.Registry;
 
 namespace UI
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
-        public App()
+        protected override void OnStartup(StartupEventArgs e)
         {
-            // Bắt lỗi trên luồng UI chính của WPF
-            this.DispatcherUnhandledException += App_DispatcherUnhandledException;
+            // Lỗi không bắt được ở đâu cũng ghi vào crash.log để biết nguyên nhân; lỗi ở luồng giao diện thì hiện hộp thoại và chạy tiếp
+            DispatcherUnhandledException += OnDispatcherException;
+            AppDomain.CurrentDomain.UnhandledException += (_, ev) => WriteCrashLog("AppDomain", ev.ExceptionObject as Exception);
+            TaskScheduler.UnobservedTaskException += (_, ev) => { WriteCrashLog("Task", ev.Exception); ev.SetObserved(); };
 
-            // Bắt lỗi trên các luồng ngầm (Background threads, Task)
-            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+            base.OnStartup(e);
         }
 
-        private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+        private void OnDispatcherException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            MessageBox.Show($"Lỗi UI: {e.Exception.Message}\n\n{e.Exception.StackTrace}", "Crash Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            // Nếu muốn ứng dụng tiếp tục chạy thay vì văng:
-            // e.Handled = true; 
+            string path = WriteCrashLog("UI", e.Exception);
+            e.Handled = true;       // không sập chương trình vì một lỗi ở giao diện
+            try
+            {
+                MessageBox.Show($"Có lỗi: {e.Exception.Message}\n\nChi tiết đã ghi vào:\n{path}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch { }
         }
 
-        private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+        private static string WriteCrashLog(string source, Exception? ex)
         {
-            var ex = e.ExceptionObject as Exception;
-            MessageBox.Show($"Lỗi toàn cục: {ex?.Message}\n\n{ex?.StackTrace}", "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            string path = "";
+            try
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VisionGraph");
+                Directory.CreateDirectory(dir);
+                path = Path.Combine(dir, "crash.log");
+                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ({source})\r\n{ex}\r\n\r\n");
+            }
+            catch { }
+            return path;
         }
     }
-
 }
