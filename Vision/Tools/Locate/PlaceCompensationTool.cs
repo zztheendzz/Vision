@@ -91,9 +91,11 @@ namespace Vision.Tools.Locate
 
         protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)
         {
-            string path = input.Get<string>("CalibrationPath");
-            if (string.IsNullOrWhiteSpace(path))
+            string template = input.Get<string>("CalibrationPath");
+            if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt CalibrationPath");
+            if (!context.TryResolvePath(template, out string path, out string? pathError))
+                return VisionToolResult.ConfigError(pathError!);
 
             var now = input.Get<Pose2D>("Pose");
             var reference = input.Get<Pose2D>("Reference");

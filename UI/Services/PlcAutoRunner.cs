@@ -22,7 +22,7 @@ namespace UI.Services
         private sealed record Bits(string Done, string Ok, string Ng, string Err);
 
         private readonly DeviceManager _devices;
-        private readonly Func<CancellationToken, Task<RunVerdict>> _runCycle;
+        private readonly Func<int, CancellationToken, Task<RunVerdict>> _runCycle;
         private readonly Action<string> _log;
         private CancellationTokenSource? _cts;
 
@@ -31,7 +31,7 @@ namespace UI.Services
 
         public bool IsRunning { get; private set; }
 
-        public PlcAutoRunner(DeviceManager devices, Func<CancellationToken, Task<RunVerdict>> runCycle, Action<string> log)
+        public PlcAutoRunner(DeviceManager devices, Func<int, CancellationToken, Task<RunVerdict>> runCycle, Action<string> log)
         {
             _devices = devices;
             _runCycle = runCycle;
@@ -55,19 +55,20 @@ namespace UI.Services
             if (bits.Done.Length + bits.Ok.Length + bits.Ng.Length + bits.Err.Length == 0)
                 return $"Chưa đặt bit nào để báo kết quả về PLC cho {cfg.Name} (Bit vision xong / OK / NG / lỗi).";
 
+            string fovReg = cfg.GetString("FovReg").Trim();      // trống = không dùng FOV
             int pollMs = Math.Clamp(cfg.GetInt("PollMs", 20), 10, 1000);
 
             _cts = new CancellationTokenSource();
             IsRunning = true;
             var ct = _cts.Token;
-            _ = Task.Run(() => LoopAsync(plc, cfg.Name, trigger, bits, pollMs, ct));
-            _log($"[tự động] Bật. Chờ bit {trigger} của {cfg.Name} lên 1.");
+            _ = Task.Run(() => LoopAsync(plc, cfg.Name, trigger, fovReg, bits, pollMs, ct));
+            _log($"[tự động] Bật. Chờ bit {trigger} của {cfg.Name} lên 1" + (fovReg.Length > 0 ? $"; số FOV đọc từ {fovReg}." : "."));
             return null;
         }
 
         public void Stop() => _cts?.Cancel();
 
-        private async Task LoopAsync(IPlcDriver plc, string plcName, string trigger, Bits bits, int pollMs, CancellationToken ct)
+        private async Task LoopAsync(IPlcDriver plc, string plcName, string trigger, string fovReg, Bits bits, int pollMs, CancellationToken ct)
         {
             string? stopReason = null;
             try
@@ -97,6 +98,15 @@ namespace UI.Services
 
                     if (!now) continue;
 
+                    // Số FOV phải đọc trước khi PLC có thể đổi nó: PLC ghi FOV rồi mới bật bit chụp
+                    int fov = -1;
+                    string? fovError = null;
+                    if (fovReg.Length > 0)
+                    {
+                        try { fov = await plc.ReadWordAsync(fovReg, ct); }
+                        catch (Exception ex) when (ex is not OperationCanceledException) { fovError = $"Không đọc được thanh ghi FOV {fovReg}: {ex.Message}"; }
+                    }
+
                     // Nhận lệnh: hạ bit yêu cầu về 0 ngay để PLC biết đã nhận, rồi xóa kết quả cũ
                     try
                     {
@@ -109,14 +119,22 @@ namespace UI.Services
                         break;
                     }
 
-                    _log($"[tự động] {plcName} yêu cầu chụp ({trigger}=1, đã hạ về 0)");
+                    _log($"[tự động] {plcName} yêu cầu chụp ({trigger}=1, đã hạ về 0)" + (fovReg.Length > 0 ? $", FOV {fov}" : ""));
                     RunVerdict verdict;
-                    try { verdict = await _runCycle(ct); }
-                    catch (OperationCanceledException) { throw; }
-                    catch (Exception ex)
+                    if (fovError != null)
                     {
-                        _log($"[tự động - LỖI] {ex.Message}");
+                        _log($"[tự động - LỖI] {fovError}");
                         verdict = RunVerdict.Error;
+                    }
+                    else
+                    {
+                        try { verdict = await _runCycle(fov, ct); }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            _log($"[tự động - LỖI] {ex.Message}");
+                            verdict = RunVerdict.Error;
+                        }
                     }
 
                     try { await WriteResultAsync(plc, bits, verdict, ct); }

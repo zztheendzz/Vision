@@ -6,6 +6,7 @@ using Vision.Services;
 
 namespace Vision.Execution
 {
+
     public class GraphExecutor
     {
         private readonly IVisionLogger _logger;
@@ -27,7 +28,7 @@ namespace Vision.Execution
             var order = graph.GetTopologicalOrder();
 
             // Một ToolContext chung cho cả lượt: Mode / NeedDisplay lấy từ RunOptions
-            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay);
+            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay, options.Fov);
 
             // Chụp tham số hiệu lực ngay đầu lượt: UI sửa node giữa chừng không ảnh hưởng lượt đang chạy
             var effective = BuildEffectiveParameters(graph, options);
@@ -105,22 +106,6 @@ namespace Vision.Execution
 
         private static Dictionary<Guid, Dictionary<string, object?>> BuildEffectiveParameters(
             VisionGraph graph, RunOptions options)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         {
             var eff = new Dictionary<Guid, Dictionary<string, object?>>();
             foreach (var n in graph.Nodes)

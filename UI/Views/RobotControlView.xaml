@@ -1,0 +1,213 @@
+﻿<UserControl x:Class="UI.Views.RobotControlView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:UI.Views"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <!-- Điều khiển robot thủ công. DataContext = DeviceViewModel của robot.
+         Dùng chung ở tab "Điều khiển" của cấu hình thiết bị và ở cửa sổ thả nổi (Robot + camera). -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="4,8,4,16">
+
+            <Button x:Name="FloatButton" Content="Mở cửa sổ riêng (kèm camera trực tiếp)" Style="{StaticResource OutlineButton}"
+                        HorizontalAlignment="Left" Click="Float_Click" Margin="0,4,0,0"
+                        ToolTip="Tách phần điều khiển robot ra cửa sổ thả nổi, đặt cạnh khung camera để vừa nhích vừa nhìn ảnh" />
+            <TextBlock Text="Robot sẽ chuyển động thật. Để tay gần nút dừng khẩn và dùng tốc độ thấp khi thử."
+                               Foreground="{StaticResource VsMutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+            <!-- Quyền điều khiển và servo -->
+            <TextBlock Text="Quyền điều khiển" FontWeight="SemiBold" Margin="0,14,0,6"
+                               Foreground="{StaticResource VsAccentBrush}" />
+            <WrapPanel>
+                <Button Content="Chiếm quyền" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding TakeControlCommand}"
+                                ToolTip="Bật quyền điều khiển, dừng chương trình đang chạy và reset" />
+                <Button Content="Trả quyền" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ReleaseControlCommand}" />
+                <Button Content="Dừng + Reset" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding StopAndResetCommand}" />
+                <Button Content="Servo ON" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ServoOnCommand}"
+                                ToolTip="Robot có thể nhúc nhích khi bật servo" />
+                <Button Content="Servo OFF" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ServoOffCommand}" />
+            </WrapPanel>
+
+            <!-- Nhích thủ công -->
+            <TextBlock Text="Nhích bằng mũi tên (X, Y, Z, xoay Rz)" FontWeight="SemiBold" Margin="0,18,0,6"
+                               Foreground="{StaticResource VsAccentBrush}" />
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock Text="Bước (mm)" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   Foreground="{StaticResource VsMutedBrush}" />
+                <ComboBox Width="70" ItemsSource="{Binding JogStepsMm}"
+                                  SelectedItem="{Binding JogStepMm, Mode=TwoWay}" />
+                <TextBlock Text="Bước xoay (°)" VerticalAlignment="Center" Margin="16,0,6,0"
+                                   Foreground="{StaticResource VsMutedBrush}" />
+                <ComboBox Width="70" ItemsSource="{Binding JogStepsDeg}"
+                                  SelectedItem="{Binding JogStepDeg, Mode=TwoWay}" />
+                <TextBlock Text="Tốc độ (%)" VerticalAlignment="Center" Margin="16,0,6,0"
+                                   Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="50" Text="{Binding SpeedPercent, UpdateSourceTrigger=LostFocus}" />
+                <Button Content="Đặt" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ApplySpeedCommand}" />
+                <TextBlock Text="Lặp (ms)" VerticalAlignment="Center" Margin="16,0,6,0"
+                                   Foreground="{StaticResource VsMutedBrush}"
+                                   ToolTip="Khi giữ nút: gửi bước kế tiếp sau từng này ms. Nhỏ hơn = mượt hơn nhưng robot dừng chậm hơn khi thả nút" />
+                <TextBox Width="50" Text="{Binding JogRepeatMs, UpdateSourceTrigger=LostFocus}" />
+            </WrapPanel>
+
+            <!-- Bàn phím mũi tên: bấm nhanh = một bước, GIỮ nút = chạy liên tục, thả nút = dừng -->
+            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+
+                <!-- X / Y -->
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Button Grid.Row="0" Grid.Column="1" Content="▲" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Y +"
+                                IsEnabled="{Binding IsConnected}" Tag="Y+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                        <Button Grid.Row="1" Grid.Column="0" Content="◀" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="X −"
+                                IsEnabled="{Binding IsConnected}" Tag="X-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="X / Y" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource VsMutedBrush}" />
+                        <Button Grid.Row="1" Grid.Column="2" Content="▶" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="X +"
+                                IsEnabled="{Binding IsConnected}" Tag="X+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                        <Button Grid.Row="2" Grid.Column="1" Content="▼" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Y −"
+                                IsEnabled="{Binding IsConnected}" Tag="Y-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                    </Grid>
+                    <TextBlock Text="◀ X−   X+ ▶   ▲ Y+   Y− ▼" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource VsMutedBrush}" />
+                </StackPanel>
+
+                <!-- Z -->
+                <StackPanel Margin="28,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Button Grid.Row="0" Grid.Column="0" Content="▲" Width="56" Height="42" FontSize="18"
+                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z + (lên)"
+                                        IsEnabled="{Binding IsConnected}" Tag="Z+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                        <TextBlock Grid.Row="1" Text="Z" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource VsMutedBrush}" />
+                        <Button Grid.Row="2" Grid.Column="0" Content="▼" Width="56" Height="42" FontSize="18"
+                                        FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Z − (xuống)"
+                                        IsEnabled="{Binding IsConnected}" Tag="Z-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                    </Grid>
+                    <TextBlock Text="Z+ lên / Z− xuống" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource VsMutedBrush}" />
+                </StackPanel>
+
+                <!-- Xoay Rz -->
+                <StackPanel Margin="28,0,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Row="0" Grid.Column="0" Content="↻" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Rz − (xoay thuận chiều kim đồng hồ)"
+                                IsEnabled="{Binding IsConnected}" Tag="R-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                        <Button Grid.Row="0" Grid.Column="1" Content="↺" Width="56" Height="42" FontSize="18"
+                                FontFamily="Segoe UI Symbol" Style="{StaticResource OutlineButton}" ToolTip="Rz + (xoay ngược chiều kim đồng hồ)"
+                                IsEnabled="{Binding IsConnected}" Tag="R+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" LostMouseCapture="Jog_Up" />
+                    </Grid>
+                    <TextBlock Text="Rz− ↻   ↺ Rz+" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource VsMutedBrush}" />
+                </StackPanel>
+            </StackPanel>
+            <TextBlock Text="Chiều mũi tên theo hệ trục gốc của robot (Z+ lên); đổi bước và tốc độ ở trên. Giữ nút để chạy liên tục, thả nút để dừng."
+                               Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,6,0,0" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="Đọc vị trí" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding RefreshPositionCommand}" />
+                <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- Di chuyển tới tọa độ X, Y, Z, A, B, C -->
+            <TextBlock Text="Di chuyển tới tọa độ" FontWeight="SemiBold" Margin="0,18,0,6"
+                               Foreground="{StaticResource VsAccentBrush}" />
+            <WrapPanel>
+                <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="70" Text="{Binding TargetX, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="Y" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="70" Text="{Binding TargetY, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="Z" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="70" Text="{Binding TargetZ, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="A" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TargetA, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="B" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TargetB, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="C" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TargetC, UpdateSourceTrigger=LostFocus}" />
+            </WrapPanel>
+            <WrapPanel Margin="0,6,0,0">
+                <Button Content="Lấy vị trí hiện tại" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding FillCurrentPositionCommand}" />
+                <CheckBox Content="Đường thẳng (MVS)" IsChecked="{Binding MoveLinear}"
+                                  VerticalAlignment="Center" Margin="10,0,10,0"
+                                  ToolTip="Bỏ tick = nội suy khớp (MOV), đường đi có thể cong" />
+                <Button Content="Di chuyển" Style="{StaticResource AccentButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding MoveToCoordinatesCommand}" />
+            </WrapPanel>
+            <TextBlock Text="X, Y, Z tính bằng mm; A, B, C bằng độ; hệ gốc robot. Cần chiếm quyền và bật servo." TextWrapping="Wrap"
+                               Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,4,0,0" />
+
+            <!-- Gửi thử độ lệch theo cách đã chọn ở tab Thông số -->
+            <TextBlock Text="Gửi thử độ lệch" FontWeight="SemiBold" Margin="0,18,0,6"
+                               Foreground="{StaticResource VsAccentBrush}" />
+            <WrapPanel>
+                <TextBlock Text="dX (mm)" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TestDx, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="dY (mm)" VerticalAlignment="Center" Margin="12,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TestDy, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="dRz (°)" VerticalAlignment="Center" Margin="12,0,4,0" Foreground="{StaticResource VsMutedBrush}" />
+                <TextBox Width="60" Text="{Binding TestDrz, UpdateSourceTrigger=LostFocus}" />
+                <Button Content="Gửi thử" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding SendTestOffsetCommand}" />
+            </WrapPanel>
+
+            <!-- Điểm: đọc danh sách từ chương trình, chọn điểm cần bù -->
+            <TextBlock Text="Điểm trong chương trình" FontWeight="SemiBold" Margin="0,18,0,6"
+                               Foreground="{StaticResource VsAccentBrush}" />
+            <WrapPanel>
+                <Button Content="Đọc danh sách điểm" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ReadPointListCommand}" />
+                <ComboBox MinWidth="120" Margin="8,0,0,0"
+                                  ItemsSource="{Binding RobotPoints}"
+                                  SelectedItem="{Binding SelectedPoint, Mode=TwoWay}" />
+                <Button Content="Xem giá trị" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding ShowPointCommand}" />
+                <Button Content="Đi tới điểm" Style="{StaticResource AccentButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding GoToPointCommand}"
+                                ToolTip="Robot chuyển động thật tới điểm đã chọn (có hộp thoại xác nhận)" />
+                <Button Content="Điền vào ô tọa độ" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding FillFromPointCommand}"
+                                ToolTip="Điền tọa độ điểm vào mục 'Di chuyển tới tọa độ' để sửa trước khi đi" />
+                <Button Content="Thử ghi lại" Style="{StaticResource OutlineButton}"
+                                IsEnabled="{Binding IsConnected}" Command="{Binding WritePointBackCommand}"
+                                ToolTip="Đọc điểm rồi ghi lại đúng giá trị đó (điểm không đổi) để thử đường ghi" />
+            </WrapPanel>
+            <TextBlock Text="Điểm chọn ở đây cũng là 'Điểm cần bù' ở tab Thông số. Đi tới điểm dùng kiểu đường đi (MVS/MOV) và tốc độ ở các mục phía trên."
+                               Foreground="{StaticResource VsMutedBrush}" FontSize="11" Margin="2,4,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

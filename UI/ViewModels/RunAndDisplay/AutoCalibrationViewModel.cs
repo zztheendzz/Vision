@@ -11,6 +11,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using UI.Models;
 using UI.Services;
 using Vision.Calibration;
 using Vision.Geometry;
@@ -33,11 +34,45 @@ namespace UI.ViewModels.RunAndDisplay
         private readonly IDialogService _dialogs;
         private readonly Func<PlcMap?>? _plcMap;
         private readonly IProgress<string> _progress;
+        private readonly IProgress<CaptureSample> _captureProgress;
+        private readonly Action<CaptureSample> _onSample;
         private readonly StringBuilder _log = new();
         private CancellationTokenSource? _cts;
 
         // ---------- Dùng chung ----------
-        [ObservableProperty] private string _calibrationPath = "calibration.json";
+        [ObservableProperty, NotifyPropertyChangedFor(nameof(ResolvedCalibrationPath))] private string _calibrationPath = "calibration.json";
+
+        /// <summary>
+        /// Vị trí chụp (FOV) đang hiệu chuẩn / đo thử. Đường dẫn file có {FOV} (vd calib/fov{FOV}.json) được thay bằng số này,
+        /// nên mỗi FOV có file calib riêng, khớp với CalibrationPath của các node Pixel→Robot / Pick / Place Compensation.
+        /// </summary>
+        [ObservableProperty, NotifyPropertyChangedFor(nameof(ResolvedCalibrationPath))] private int _fov = 1;
+
+        /// <summary>Các FOV chọn được trong danh sách (1 đến 8, khớp bảng FOV trong bản đồ tín hiệu PLC).</summary>
+        public IReadOnlyList<int> FovChoices { get; } = new[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+        /// <summary>Đường dẫn file hiệu chuẩn thật sau khi thay {FOV}.</summary>
+        public string ResolvedCalibrationPath
+            => CalibrationPath.Replace("{FOV}", Fov.ToString(), StringComparison.OrdinalIgnoreCase);
+        /// <summary>Bảng các lần chụp: tọa độ robot và tọa độ ảnh tương ứng. Xóa khi bắt đầu lượt mới.</summary>
+        public System.Collections.ObjectModel.ObservableCollection<CaptureRow> Captures { get; } = new();
+
+        private void AddCapture(CaptureSample s)
+            => Captures.Add(new CaptureRow(Captures.Count + 1, s));
+
+        [RelayCommand]
+        private void ClearCaptures() => Captures.Clear();
+
+        [RelayCommand]
+        private void CopyCaptures()
+        {
+            var sb = new StringBuilder("STT\tGiai đoạn\tRobot X\tRobot Y\tRobot Rz\tẢnh Row\tẢnh Col\tẢnh góc\tGhi chú\n");
+            foreach (var r in Captures)
+                sb.AppendLine(string.Join('\t', r.No, r.Phase, r.RobotX, r.RobotY, r.RobotRz, r.PixelRow, r.PixelColumn, r.PixelAngle, r.Note));
+            try { System.Windows.Clipboard.SetText(sb.ToString()); StatusText = $"Đã chép {Captures.Count} dòng vào clipboard"; }
+            catch (Exception ex) { StatusText = "Không chép được: " + ex.Message; }
+        }
+
         [ObservableProperty] private string _logText = "";
         [ObservableProperty] private string _statusText = "Sẵn sàng";
 
@@ -54,12 +89,18 @@ namespace UI.ViewModels.RunAndDisplay
         [ObservableProperty] private int _countX = 3;
         [ObservableProperty] private int _countY = 3;
         [ObservableProperty] private double _stepMm = 5;
-        /// <summary>Các góc xoay kiểm tra, cách nhau bằng dấu phẩy, dùng dấu chấm thập phân. Để trống = bỏ qua.</summary>
-        [ObservableProperty] private string _rotationsText = "-10, 10";
+        /// <summary>Các góc xoay (kiểm tra dấu góc VÀ calib xoay: tìm khoảng cách mốc tới trục xoay robot), cách nhau bằng dấu phẩy, dùng dấu chấm thập phân. Để trống = bỏ qua.</summary>
+        [ObservableProperty] private string _rotationsText = "-15, -7.5, 7.5, 15";
         [ObservableProperty] private int _calSpeedPercent = 10;
         [ObservableProperty] private int _calSettleMs = 800;
         [ObservableProperty] private double _maxRmsMm = 0.3;
         [ObservableProperty] private int _minValidPoints = 6;
+        /// <summary>Sai số lớn nhất của một điểm lưới (mm). 0 = không kiểm tra. Vượt thì không lưu và báo lại.</summary>
+        [ObservableProperty] private double _maxErrorMm = 0.6;
+        /// <summary>Sai số RMS tối đa của calib xoay (mm). Vượt thì không dùng kết quả xoay và báo lại.</summary>
+        [ObservableProperty] private double _maxRotationRmsMm = 0.3;
+        /// <summary>Lệch góc tối đa giữa góc robot xoay và góc đo từ ảnh (độ). Vượt thì báo lại.</summary>
+        [ObservableProperty] private double _maxAngleErrorDeg = 1.0;
 
         // ---------- 2. Chụp tại vị trí cố định ----------
         /// <summary>Điểm chụp. Để trống = máy đang ở sẵn vị trí chụp (không cần robot kết nối, không di chuyển).</summary>
@@ -129,6 +170,8 @@ namespace UI.ViewModels.RunAndDisplay
             _dialogs = dialogs;
             _plcMap = plcMap;
             _progress = new Progress<string>(AppendLog);       // tạo trên UI thread: báo tiến độ tự về UI thread
+            _captureProgress = new Progress<CaptureSample>(AddCapture);
+            _onSample = _captureProgress.Report;
             LoadReference();
         }
 
@@ -177,7 +220,8 @@ namespace UI.ViewModels.RunAndDisplay
                 }
 
                 var plan = new AutoCalibrationPlan(center, CountX, CountY, StepMm, rotations,
-                    CalSpeedPercent, CalSettleMs, MaxRmsMm, MinValidPoints, robot.PointSettings.RzAxis);
+                    CalSpeedPercent, CalSettleMs, MaxRmsMm, MinValidPoints, robot.PointSettings.RzAxis,
+                    MaxErrorMm, MaxRotationRmsMm, MaxAngleErrorDeg);
 
                 string? invalid = AutoCalibrator.Validate(plan);
                 if (invalid != null) { _dialogs.ShowError(invalid); return; }
@@ -191,10 +235,11 @@ namespace UI.ViewModels.RunAndDisplay
                         "\n\nĐảm bảo: mốc đang được cầm chắc, quanh robot không có vật cản, tay đặt gần nút dừng khẩn.\nTiếp tục?"))
                     return;
 
+                Captures.Clear();
                 StatusText = "Đang hiệu chuẩn tự động...";
                 AppendLog($"=== Hiệu chuẩn tự động {DateTime.Now:HH:mm:ss} ===");
 
-                var result = await AutoCalibrator.RunAsync(robot, _run.MeasurePoseAsync, plan, _progress, ct);
+                var result = await AutoCalibrator.RunAsync(robot, _run.MeasurePoseAsync, plan, _progress, ct, _onSample);
 
                 foreach (string w in result.Warnings) AppendLog("[cảnh báo] " + w);
                 AppendLog((result.Success ? "[xong] " : "[không lưu] ") + result.Message);
@@ -207,9 +252,11 @@ namespace UI.ViewModels.RunAndDisplay
                 }
 
                 SaveCalibration(result.Data);
-                StatusText = $"Đã lưu hiệu chuẩn: RMS {result.Data.RmsMm:F3} mm";
+                StatusText = result.Warnings.Count > 0
+                    ? $"Đã lưu hiệu chuẩn FOV {Fov}: RMS {result.Data.RmsMm:F3} mm, có {result.Warnings.Count} cảnh báo vượt ngưỡng"
+                    : $"Đã lưu hiệu chuẩn: RMS {result.Data.RmsMm:F3} mm";
                 _dialogs.ShowInfo(
-                    $"{result.Message}\nĐã lưu: {Path.GetFullPath(CalibrationPath)}" +
+                    $"{result.Message}\nĐã lưu (FOV {Fov}): {Path.GetFullPath(ResolvedCalibrationPath)}" +
                     (result.Warnings.Count > 0 ? "\n\nCẢNH BÁO:\n- " + string.Join("\n- ", result.Warnings) : ""));
             }
             catch (OperationCanceledException)
@@ -232,7 +279,7 @@ namespace UI.ViewModels.RunAndDisplay
         }
 
         private FixedShotOptions BuildShotOptions(IRobotDriver? robot, bool useReference)
-            => new(ShotPoint.Trim(), CalibrationPath, InvertRz, robot?.PointSettings.RzAxis ?? 'C',
+            => new(ShotPoint.Trim(), ResolvedCalibrationPath, InvertRz, robot?.PointSettings.RzAxis ?? 'C',
                    ShotSettleMs, ShotSpeedPercent,
                    useReference && ReferenceTaught ? new RobotPose(RefX, RefY, RefRz) : null);
 
@@ -270,7 +317,7 @@ namespace UI.ViewModels.RunAndDisplay
 
                 OffsetSender? send = null;
                 if (SendToPlc) send = SendOffsetToPlcAsync;
-                var result = await FixedShotPicker.RunAsync(robot, _run.MeasurePoseAsync, options, send, _progress, ct);
+                var result = await FixedShotPicker.RunAsync(robot, _run.MeasurePoseAsync, options, send, _progress, ct, _onSample);
 
                 AppendLog((result.Success ? "[xong] " : "[không gửi] ") + result.Message);
                 StatusText = result.Success ? "Xong" : "Không thành công";
@@ -315,7 +362,7 @@ namespace UI.ViewModels.RunAndDisplay
                 StatusText = "Đang dạy vị trí chuẩn...";
                 AppendLog($"=== Dạy vị trí chuẩn {DateTime.Now:HH:mm:ss} ===");
 
-                var result = await FixedShotPicker.MeasureAsync(robot, _run.MeasurePoseAsync, options, _progress, ct);
+                var result = await FixedShotPicker.MeasureAsync(robot, _run.MeasurePoseAsync, options, _progress, ct, _onSample);
                 if (!result.Success || result.Pose is not { } pose)
                 {
                     AppendLog("[không lưu] " + result.Message);
@@ -401,9 +448,10 @@ namespace UI.ViewModels.RunAndDisplay
             if (string.IsNullOrWhiteSpace(CalibrationPath))
                 throw new InvalidOperationException("Chưa nhập đường dẫn file hiệu chuẩn.");
 
-            if (File.Exists(CalibrationPath))
-                File.Copy(CalibrationPath, CalibrationPath + ".bak", overwrite: true);
-            CalibrationStore.Save(data, CalibrationPath);
+            string path = ResolvedCalibrationPath;
+            if (File.Exists(path))
+                File.Copy(path, path + ".bak", overwrite: true);
+            CalibrationStore.Save(data, path);
         }
 
         private static bool TryParseRotations(string text, out List<double> angles, out string? error)

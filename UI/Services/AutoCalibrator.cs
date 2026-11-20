@@ -22,7 +22,13 @@ namespace UI.Services
         int SettleMs,                            // chờ sau khi tới nơi cho hết rung
         double MaxRmsMm,                         // sai số RMS lớn nhất chấp nhận được
         int MinValidPoints,                      // số điểm hợp lệ tối thiểu
-        char RzAxis);                            // trục xoay của robot ứng với góc Rz (thường 'C')
+        char RzAxis,                             // trục xoay của robot ứng với góc Rz (thường 'C')
+        double MaxErrorMm = 0,                   // sai số lớn nhất của một điểm lưới chấp nhận được (0 = không kiểm tra)
+        double MaxRotationRmsMm = 0.3,           // sai số RMS của calib xoay (tìm mốc cách trục xoay); vượt thì không dùng kết quả xoay
+        double MaxAngleErrorDeg = 1.0);          // lệch góc tối đa giữa góc robot xoay và góc đo từ ảnh; vượt thì cảnh báo
+
+    /// <summary>Kết quả calib xoay: vector từ TCP tới mốc (mm, hệ robot), sai số RMS của phép khớp và số mẫu dùng.</summary>
+    public sealed record RotationFit(double OffsetX, double OffsetY, double RmsMm, int Samples);
 
     /// <summary>Kết quả hiệu chuẩn tự động. Data khác null khi tính được ma trận (kể cả khi bị từ chối vì sai số lớn).</summary>
     public sealed record AutoCalibrationResult(
@@ -47,7 +53,6 @@ namespace UI.Services
         private const double ArriveToleranceMm = 0.05;
         private const double ArriveToleranceDeg = 0.05;
         private static readonly TimeSpan ArriveTimeout = TimeSpan.FromSeconds(20);
-        private const double RotationToleranceDeg = 1.0;
 
         /// <summary>Kiểm tra thông số. Trả về lỗi hoặc null nếu hợp lệ.</summary>
         public static string? Validate(AutoCalibrationPlan plan)
@@ -69,6 +74,9 @@ namespace UI.Services
             if (plan.MinValidPoints > plan.CountX * plan.CountY)
                 return "Số điểm hợp lệ tối thiểu lớn hơn tổng số điểm lưới.";
             if (!double.IsFinite(plan.MaxRmsMm) || plan.MaxRmsMm <= 0) return "Sai số RMS tối đa phải lớn hơn 0.";
+            if (!double.IsFinite(plan.MaxErrorMm) || plan.MaxErrorMm < 0) return "Sai số lớn nhất của một điểm không được âm (0 = không kiểm tra).";
+            if (!double.IsFinite(plan.MaxRotationRmsMm) || plan.MaxRotationRmsMm <= 0) return "Sai số tối đa của calib xoay phải lớn hơn 0.";
+            if (!double.IsFinite(plan.MaxAngleErrorDeg) || plan.MaxAngleErrorDeg <= 0) return "Lệch góc tối đa phải lớn hơn 0.";
             return null;
         }
 
@@ -94,7 +102,8 @@ namespace UI.Services
             Func<CancellationToken, Task<Pose2D?>> measure,
             AutoCalibrationPlan plan,
             IProgress<string> progress,
-            CancellationToken ct)
+            CancellationToken ct,
+            Action<CaptureSample>? sample = null)
         {
             var points = new List<CalibrationPoint>();
             var warnings = new List<string>();
@@ -127,6 +136,8 @@ namespace UI.Services
                     var pose = await measure(ct);
                     if (pose is not { } p || !p.IsFinite)
                     {
+                        sample?.Invoke(new CaptureSample("Lưới", n + 1, arrived.Actual.X, arrived.Actual.Y, arrived.Actual.GetAxis(plan.RzAxis),
+                                                         null, null, null, "Không thấy mốc"));
                         skipped++;
                         progress.Report($"    Không thấy mốc ở điểm này: bỏ qua.");
                         continue;
@@ -135,6 +146,8 @@ namespace UI.Services
                     // Dùng vị trí robot ĐỌC LẠI sau khi dừng, không dùng vị trí lệnh
                     var actual = arrived.Actual;
                     points.Add(new CalibrationPoint(p.Column, p.Row, actual.X, actual.Y));
+                    sample?.Invoke(new CaptureSample("Lưới", n + 1, actual.X, actual.Y, actual.GetAxis(plan.RzAxis),
+                                                     p.Row, p.Column, p.AngleDeg));
                     progress.Report($"    pixel ({p.Column:F2}, {p.Row:F2}) ↔ robot ({actual.X:F3}, {actual.Y:F3})");
                 }
 
@@ -163,9 +176,34 @@ namespace UI.Services
                 // ---------- Pha 2: kiểm tra dấu góc ----------
                 if (plan.RotationsDeg.Count > 0)
                 {
-                    var rotWarn = await CheckRotationAsync(robot, measure, plan, affine, progress, ct);
+                    var (rotWarn, fit) = await CheckRotationAsync(robot, measure, plan, affine, progress, ct, sample);
                     warnings.AddRange(rotWarn);
+
+                    // ---------- Calib xoay: bù độ lệch giữa mốc và trục xoay robot vào ma trận ----------
+                    if (fit != null)
+                    {
+                        double limit = plan.MaxRotationRmsMm;
+                        double length = Math.Sqrt(fit.OffsetX * fit.OffsetX + fit.OffsetY * fit.OffsetY);
+                        if (fit.RmsMm > limit)
+                            warnings.Add($"Calib xoay: sai số {fit.RmsMm:F3} mm vượt {limit:F2} mm, KHÔNG dùng kết quả xoay (mốc đo không ổn định, hoặc robot xoay không quanh TCP). Ma trận vẫn lưu như chưa calib xoay.");
+                        else
+                        {
+                            data.Matrix[2] += fit.OffsetX;
+                            data.Matrix[5] += fit.OffsetY;
+                            data.MarkOffsetXMm = fit.OffsetX;
+                            data.MarkOffsetYMm = fit.OffsetY;
+                            data.RotationRmsMm = fit.RmsMm;
+                            progress.Report($"Calib xoay: mốc cách trục xoay robot {length:F3} mm (X {fit.OffsetX:F3}, Y {fit.OffsetY:F3}), " +
+                                            $"sai số {fit.RmsMm:F3} mm ({fit.Samples} góc). Đã cộng vào ma trận.");
+                        }
+                    }
                 }
+
+                if (plan.MaxErrorMm > 0 && data.MaxErrorMm > plan.MaxErrorMm)
+                    return new AutoCalibrationResult(false,
+                        $"Có điểm sai {data.MaxErrorMm:F3} mm, vượt giới hạn một điểm {plan.MaxErrorMm:F3} mm: KHÔNG lưu. " +
+                        "Xem điểm nào lệch nhiều trong nhật ký (thường do mốc đo sai ở điểm đó hoặc robot chưa dừng hẳn).",
+                        points, data, warnings);
 
                 if (data.RmsMm > plan.MaxRmsMm)
                     return new AutoCalibrationResult(false,
@@ -201,23 +239,27 @@ namespace UI.Services
         // Kiểm tra dấu góc: xoay C quanh tâm, so góc đo từ ảnh với góc robot đã xoay
         // ============================================================
 
-        private static async Task<List<string>> CheckRotationAsync(
+        private static async Task<(List<string> Warnings, RotationFit? Fit)> CheckRotationAsync(
             IRobotDriver robot, Func<CancellationToken, Task<Pose2D?>> measure, AutoCalibrationPlan plan,
-            Affine2D affine, IProgress<string> progress, CancellationToken ct)
+            Affine2D affine, IProgress<string> progress, CancellationToken ct, Action<CaptureSample>? sample = null)
         {
             var warnings = new List<string>();
 
             var centerArrived = await GoAndSettleAsync(robot, plan.Center, plan, ct);
-            if (centerArrived.Error != null) { warnings.Add("Kiểm tra góc: " + centerArrived.Error); return warnings; }
+            if (centerArrived.Error != null) { warnings.Add("Kiểm tra góc: " + centerArrived.Error); return (warnings, null); }
             var basePose = await measure(ct);
             if (basePose is not { } b || !b.IsFinite)
             {
                 warnings.Add("Kiểm tra góc: không đo được mốc ở góc 0.");
-                return warnings;
+                return (warnings, null);
             }
+            sample?.Invoke(new CaptureSample("Xoay", 0, centerArrived.Actual.X, centerArrived.Actual.Y,
+                                             centerArrived.Actual.GetAxis(plan.RzAxis), b.Row, b.Column, b.AngleDeg, "Góc 0"));
             double baseRz = affine.TransformAngle(b.AngleDeg);
 
             double worst = 0;
+            int rotIndex = 0;
+            var samples = new List<(double Deg, double Qx, double Qy, double Tx, double Ty)>();
             foreach (double a in plan.RotationsDeg.Where(x => Math.Abs(x) > 1e-6))
             {
                 ct.ThrowIfCancellationRequested();
@@ -228,8 +270,11 @@ namespace UI.Services
                 if (arrived.Error != null) { warnings.Add("Kiểm tra góc: " + arrived.Error); break; }
 
                 var pose = await measure(ct);
+                rotIndex++;
                 if (pose is not { } p || !p.IsFinite)
                 {
+                    sample?.Invoke(new CaptureSample("Xoay", rotIndex, arrived.Actual.X, arrived.Actual.Y,
+                                                     arrived.Actual.GetAxis(plan.RzAxis), null, null, null, "Không thấy mốc"));
                     warnings.Add($"Kiểm tra góc: không đo được mốc ở {a:+0.##;-0.##}°.");
                     continue;
                 }
@@ -238,17 +283,55 @@ namespace UI.Services
                 double expected = Pose2D.NormalizeAngle(arrived.Actual.GetAxis(plan.RzAxis) - centerArrived.Actual.GetAxis(plan.RzAxis));
                 double err = Math.Abs(Pose2D.NormalizeAngle(measured - expected));
                 worst = Math.Max(worst, err);
+                var (qx, qy) = affine.Apply(p.Column, p.Row);
+                samples.Add((measured, qx, qy, arrived.Actual.X, arrived.Actual.Y));
+                sample?.Invoke(new CaptureSample("Xoay", rotIndex, arrived.Actual.X, arrived.Actual.Y,
+                                                 arrived.Actual.GetAxis(plan.RzAxis), p.Row, p.Column, p.AngleDeg,
+                                                 $"Robot xoay {expected:+0.##;-0.##}°, ảnh {measured:+0.##;-0.##}°, lệch {err:F2}°"));
                 progress.Report($"    robot xoay {expected:+0.##;-0.##}°, ảnh đo {measured:+0.##;-0.##}°, lệch {err:F2}°");
 
-                if (err > RotationToleranceDeg && Math.Abs(Pose2D.NormalizeAngle(measured + expected)) < RotationToleranceDeg * 2)
+                if (err > plan.MaxAngleErrorDeg && Math.Abs(Pose2D.NormalizeAngle(measured + expected)) < plan.MaxAngleErrorDeg * 2)
                     warnings.Add($"Dấu góc có vẻ NGƯỢC: robot xoay {expected:+0.##;-0.##}° nhưng ảnh đo {measured:+0.##;-0.##}°. " +
                                  "Dùng 'Đảo chiều góc' khi gửi tọa độ, hoặc kiểm tra quy ước trục xoay.");
             }
 
-            if (worst > RotationToleranceDeg && !warnings.Any(w => w.Contains("NGƯỢC")))
-                warnings.Add($"Góc đo từ ảnh lệch tới {worst:F2}° so với góc robot xoay (ngưỡng {RotationToleranceDeg}°). " +
+            if (worst > plan.MaxAngleErrorDeg && !warnings.Any(w => w.Contains("NGƯỢC")))
+                warnings.Add($"Góc đo từ ảnh lệch tới {worst:F2}° so với góc robot xoay (ngưỡng {plan.MaxAngleErrorDeg}°). " +
                              "Kiểm tra mốc có đối xứng không (mốc tròn không có hướng sẽ đo góc không ổn định).");
-            return warnings;
+            return (warnings, FitMarkOffset(samples));
+        }
+
+        /// <summary>
+        /// Tìm vector d từ TCP tới mốc. Ma trận thô cho q = vị trí mốc thật − d, nên khi robot xoay góc m quanh TCP (đứng yên ở T):
+        /// q − T = (R(m) − I)·d. Giải bình phương tối thiểu cho d (2 ẩn), dùng góc m đo được từ ảnh nên đúng dù dấu robot ngược.
+        /// Cần ít nhất 1 góc khác 0 (từ 2 góc trở lên mới có sai số để đánh giá).
+        /// </summary>
+        public static RotationFit? FitMarkOffset(IReadOnlyList<(double Deg, double Qx, double Qy, double Tx, double Ty)> samples)
+        {
+            var use = samples.Where(s => Math.Abs(s.Deg) >= 1.0).ToList();
+            if (use.Count < 1) return null;
+
+            double nx = 0, ny = 0, den = 0;
+            foreach (var s in use)
+            {
+                double r = s.Deg * Math.PI / 180.0, c = Math.Cos(r), sn = Math.Sin(r);
+                double bx = s.Qx - s.Tx, by = s.Qy - s.Ty;
+                nx += (c - 1) * bx + sn * by;
+                ny += -sn * bx + (c - 1) * by;
+                den += 2 - 2 * c;
+            }
+            if (den < 1e-9) return null;
+            double dx = nx / den, dy = ny / den;
+
+            double sum = 0;
+            foreach (var s in use)
+            {
+                double r = s.Deg * Math.PI / 180.0, c = Math.Cos(r), sn = Math.Sin(r);
+                double ex = (c - 1) * dx - sn * dy - (s.Qx - s.Tx);
+                double ey = sn * dx + (c - 1) * dy - (s.Qy - s.Ty);
+                sum += ex * ex + ey * ey;
+            }
+            return new RotationFit(dx, dy, Math.Sqrt(sum / use.Count), use.Count);
         }
 
         // ============================================================

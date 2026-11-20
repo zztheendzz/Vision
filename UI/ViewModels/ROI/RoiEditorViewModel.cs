@@ -7,6 +7,7 @@ using UI.ViewModels.Graph;
 using UI.ViewModels.ROI;
 using UI.ViewModels.ToolboxAndParam;
 using Vision.Tools.Abstractions;
+using Vision.Tools.Locate;
 
 namespace UI.ViewModels.ROI
 {
@@ -23,7 +24,23 @@ namespace UI.ViewModels.ROI
         private readonly PropertyPanelViewModel _properties;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(OriginalRoi), nameof(ProcessedRoi))]
         private RoiGeometry? _current;
+
+        /// <summary>true: ROI vẽ / kéo trên "Ảnh xử lý" (ảnh sau khi qua tool), false: trên "Ảnh gốc".</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(OriginalRoi), nameof(ProcessedRoi), nameof(OriginalErase), nameof(ProcessedErase))]
+        private bool _onProcessed;
+
+        public RoiGeometry? OriginalRoi => OnProcessed ? null : Current;
+        public RoiGeometry? ProcessedRoi => OnProcessed ? Current : null;
+        public string? OriginalErase => OnProcessed ? null : EraseAreas;
+        public string? ProcessedErase => OnProcessed ? EraseAreas : null;
+
+        /// <summary>Vùng xóa viền của node đang chọn (chữ). null: node không có tham số EraseAreas.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(OriginalErase), nameof(ProcessedErase))]
+        private string? _eraseAreas;
 
         public RoiEditorViewModel(GraphEditorViewModel editor, PropertyPanelViewModel properties)
         {
@@ -43,6 +60,48 @@ namespace UI.ViewModels.ROI
             Current = null;
             if (node?.Tool is IRoiEditable)
                 Current = RoiGeometry.FromNode(node);
+
+            EraseAreas = node != null && node.Tool.Parameters.Any(p => p.Name == EraseParam)
+                ? node.GetParameter<string>(EraseParam)
+                : null;
+        }
+
+        private const string EraseParam = "EraseAreas";
+
+        /// <summary>Thêm một vùng xóa viền (chữ "R ..." hoặc "C ...") vào node đang chọn.</summary>
+        [RelayCommand]
+        private void AddEraseArea(string? area)
+        {
+            var node = _editor.SelectedNode?.Model;
+            if (node == null || _editor.IsLocked || EraseAreas == null) return;
+
+            var parsed = ShapeEraseAreas.Parse(area, out _);
+            if (parsed == null || parsed.Count != 1) return;
+
+            SetErase(node, ShapeEraseAreas.Append(EraseAreas, parsed[0]));
+        }
+
+        /// <summary>Bỏ hết vùng xóa viền của node đang chọn.</summary>
+        [RelayCommand]
+        private void ClearEraseAreas()
+        {
+            var node = _editor.SelectedNode?.Model;
+            if (node == null || _editor.IsLocked || EraseAreas == null) return;
+            SetErase(node, "");
+        }
+
+        private void SetErase(Vision.Graph.VisionNode node, string text)
+        {
+            try
+            {
+                node.SetParameter(EraseParam, text);
+                EraseAreas = text;
+                _properties.ReloadValues();
+            }
+            catch (ArgumentException)
+            {
+                // Giá trị bị từ chối: node giữ giá trị trước
+            }
         }
 
         /// <summary>

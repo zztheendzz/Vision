@@ -8,6 +8,33 @@ using Vision.Geometry;
 
 namespace Vision.Calibration
 {
+    /// <summary>Nội dung file hiệu chuẩn (JSON). Matrix = [A, B, C, D, E, F] của Affine2D.</summary>
+    public sealed class CalibrationData
+    {
+        public int FormatVersion { get; set; } = 1;
+        public double[] Matrix { get; set; } = Array.Empty<double>();
+        public int PointCount { get; set; }
+        public double RmsMm { get; set; }
+        public double MaxErrorMm { get; set; }
+        public string CreatedAt { get; set; } = "";
+
+        /// <summary>
+        /// Calib xoay: mốc nằm lệch so với TCP robot (vector từ TCP tới mốc, hệ robot, lúc hiệu chuẩn). Đã cộng sẵn vào C, F của Matrix
+        /// nên Matrix biến pixel thành vị trí THẬT của điểm đó trong hệ robot (không phải vị trí TCP). Ghi ở đây để xem; 0 = không có / chưa calib xoay.
+        /// </summary>
+        public double MarkOffsetXMm { get; set; }
+        public double MarkOffsetYMm { get; set; }
+        public double RotationRmsMm { get; set; }
+
+        public Affine2D ToAffine()
+        {
+            if (FormatVersion != 1) throw new InvalidDataException($"Không hỗ trợ FormatVersion {FormatVersion}");
+            if (Matrix.Length != 6) throw new InvalidDataException("Matrix phải có đúng 6 số");
+            return new Affine2D(Matrix[0], Matrix[1], Matrix[2], Matrix[3], Matrix[4], Matrix[5]);
+        }
+    }
+
+    /// <summary>Đọc/ghi file hiệu chuẩn và tạo hiệu chuẩn từ file CSV các cặp điểm.</summary>
     public static class CalibrationStore
     {
         private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };

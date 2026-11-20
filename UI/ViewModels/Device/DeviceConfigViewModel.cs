@@ -383,6 +383,16 @@ namespace UI.ViewModels.Device
             _autoSave?.Stop();
             if (IsDirty) TrySaveQuietly();        // lưu nốt khi đóng
             _listener?.Dispose();
+
+            // Thoát app thì trả quyền điều khiển robot cho PLC, trước khi ngắt các kết nối
+            try
+            {
+                var robots = Devices.Where(d => d.Config.Type == DeviceType.Robot).ToList();
+                if (robots.Count > 0)
+                    Task.Run(() => Task.WhenAll(robots.Select(d => d.ReleaseOnExitAsync()))).Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception) { /* thoát app: không để lỗi ở đây chặn việc ngắt kết nối */ }
+
             Manager.Dispose();
         }
     }

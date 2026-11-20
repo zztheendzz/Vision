@@ -50,9 +50,10 @@ namespace UI.Services
             FixedShotOptions o,
             OffsetSender? send,
             IProgress<string> progress,
-            CancellationToken ct)
+            CancellationToken ct,
+            Action<CaptureSample>? sample = null)
         {
-            var (pose, error) = await ShootAsync(robot, measure, o, progress, ct);
+            var (pose, error) = await ShootAsync(robot, measure, o, progress, ct, sample);
             if (pose is not { } p) return Fail(error!);
 
             if (o.Reference is not { } reference)
@@ -83,9 +84,10 @@ namespace UI.Services
             Func<CancellationToken, Task<Pose2D?>> measure,
             FixedShotOptions o,
             IProgress<string> progress,
-            CancellationToken ct)
+            CancellationToken ct,
+            Action<CaptureSample>? sample = null)
         {
-            var (pose, error) = await ShootAsync(robot, measure, o, progress, ct);
+            var (pose, error) = await ShootAsync(robot, measure, o, progress, ct, sample);
             return pose is { } p
                 ? new FixedShotResult(true, $"Vật ở robot {p}.", p, null)
                 : Fail(error!);
@@ -93,7 +95,7 @@ namespace UI.Services
 
         private static async Task<(RobotPose? Pose, string? Error)> ShootAsync(
             IRobotDriver? robot, Func<CancellationToken, Task<Pose2D?>> measure,
-            FixedShotOptions o, IProgress<string> progress, CancellationToken ct)
+            FixedShotOptions o, IProgress<string> progress, CancellationToken ct, Action<CaptureSample>? sample = null)
         {
             if (string.IsNullOrWhiteSpace(o.CalibrationPath) || !File.Exists(o.CalibrationPath))
                 return (null, "Không thấy file hiệu chuẩn: " + o.CalibrationPath);
@@ -141,13 +143,18 @@ namespace UI.Services
             progress.Report("Chụp ảnh và tìm vật...");
             var pose = await measure(ct);
             if (pose is not { } p || !p.IsFinite)
+            {
+                sample?.Invoke(new CaptureSample("Chụp cố định", 0, null, null, null, null, null, null, "Không thấy vật"));
                 return (null, "Không thấy vật trong ảnh: KHÔNG gửi gì.");
+            }
 
             // ---------- 3. Đổi sang tọa độ robot ----------
             var (x, y) = affine.Apply(p.Column, p.Row);
             double rz = affine.TransformAngle(p.AngleDeg);
             if (o.InvertRz) rz = -rz;
             var robotPose = new RobotPose(x, y, Pose2D.NormalizeAngle(rz));
+            sample?.Invoke(new CaptureSample("Chụp cố định", 0, robotPose.X, robotPose.Y, robotPose.Rz,
+                                             p.Row, p.Column, p.AngleDeg, "Tọa độ robot tính từ ảnh"));
             progress.Report($"Vật trong ảnh {p} → robot {robotPose}");
             return (robotPose, null);
         }

@@ -25,7 +25,8 @@ namespace Vision.Tools.Source
         public override IReadOnlyList<ParamDef> Parameters { get; } = new[]
         {
             new ParamDef("Camera", typeof(string), "",
-                         Description: "Tên camera (đúng tên thiết bị, ví dụ Camera 1). Để trống = camera đầu tiên")
+                         Description: "Chọn camera theo tên đã đặt ở Cấu hình kết nối. Để trống = camera đầu tiên",
+                         ChoicesKey: ParamChoices.Cameras)
         };
 
         protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)

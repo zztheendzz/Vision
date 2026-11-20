@@ -39,7 +39,11 @@ namespace Communication.Configuration
         public const string Simulated = "Simulated";
         public const string Mitsubishi = "Mitsubishi";
         public const string GigE = "GigE Vision";
-        /// <summary>PLC Mitsubishi qua MX Component (COM); dùng tạm để thử với GX Simulator3.</summary>
+        /// <summary>
+        /// PLC Mitsubishi qua MX Component (COM), dùng tạm để thử với GX Simulator3.
+        /// ĐANG TẮT: code vẫn còn nhưng chỉ được biên dịch và hiện trong giao diện khi định nghĩa MX_COMPONENT
+        /// (Project Properties → Build → Conditional compilation symbols) và có project MxBridge.
+        /// </summary>
         public const string MxComponent = "MX Component";
 
         /// <summary>Robot: gửi độ lệch (dX, dY, dRz) vào biến điểm trung gian; chương trình robot tự cộng vào điểm.</summary>
@@ -189,10 +193,14 @@ namespace Communication.Configuration
                 GroupFields = new[] { ReconnectField() },
                 DeviceFields = new[]
                 {
+#if MX_COMPONENT
                     Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, MxComponent, Simulated }, "Kết nối"),
                     new FieldDef("StationNo", "Số trạm logic (MX Component)", FieldKind.Integer, "1", "Kết nối", Min: 0, Max: 1024,
                                  Hint: "Tạo trong Communication Setting Utility (GX Simulator3 hoặc PLC thật)")
                         { ShowWhenKey = KeyMode, ShowWhenValue = MxComponent },
+#else
+                    Choice(KeyMode, "Chế độ", Mitsubishi, new[] { Mitsubishi, Simulated }, "Kết nối"),
+#endif
                     WhenMitsubishi(Ip(KeyIp, "IP", "192.168.0.195")),
                     WhenMitsubishi(Int(KeyPort, "Cổng", 3006, 1, 65535, "Kết nối")),
                     WhenMitsubishi(Choice("Frame", "Khung dữ liệu", "Binary", new[] { "Binary", "Ascii" }, "Kết nối")),

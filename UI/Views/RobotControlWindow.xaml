@@ -1,0 +1,66 @@
+﻿<Window x:Class="UI.Views.RobotControlWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UI.Views"
+        mc:Ignorable="d"
+        Title="RobotControlWindow" Height="450" Width="800">
+    <!-- Cửa sổ thả nổi: kéo sang màn hình khác hoặc đặt cạnh cửa sổ chính. Trái: camera trực tiếp. Phải: điều khiển robot. -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="280" />
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="560" MinWidth="420" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Camera -->
+        <DockPanel Grid.Column="0">
+            <Border DockPanel.Dock="Top" Padding="8,6" Background="{StaticResource VsPanelHeaderBrush}"
+                    BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,0,0,1">
+                <WrapPanel>
+                    <TextBlock Text="Camera" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource VsMutedBrush}" />
+                    <ComboBox MinWidth="160" ItemsSource="{Binding Cameras}" DisplayMemberPath="Name"
+                              SelectedItem="{Binding SelectedCamera, Mode=TwoWay}" />
+                    <Button Style="{StaticResource OutlineButton}" DataContext="{Binding SelectedCamera}"
+                            IsEnabled="{Binding IsConnected}" Command="{Binding ToggleLiveCommand}">
+                        <Button.Content>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Xem trực tiếp" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLive}" Value="True">
+                                                <Setter Property="Text" Value="Dừng xem" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Button.Content>
+                    </Button>
+                    <Button Content="Chụp" Style="{StaticResource OutlineButton}" DataContext="{Binding SelectedCamera}"
+                            IsEnabled="{Binding IsConnected}" Command="{Binding SnapCommand}" />
+                </WrapPanel>
+            </Border>
+            <local:ImageViewerPanel Title="Camera" DataContext="{Binding SelectedCamera}" Display="{Binding Preview}" />
+        </DockPanel>
+
+        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" />
+
+        <!-- Robot -->
+        <DockPanel Grid.Column="2">
+            <Border DockPanel.Dock="Top" Padding="8,6" Background="{StaticResource VsPanelHeaderBrush}"
+                    BorderBrush="{StaticResource VsBorderBrush}" BorderThickness="0,0,0,1">
+                <WrapPanel>
+                    <TextBlock Text="Robot" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource VsMutedBrush}" />
+                    <ComboBox MinWidth="160" ItemsSource="{Binding Robots}" DisplayMemberPath="Name"
+                              SelectedItem="{Binding SelectedRobot, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding SelectedRobot.Message}" VerticalAlignment="Center" Margin="12,0,0,0"
+                               Foreground="{StaticResource VsMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                </WrapPanel>
+            </Border>
+            <local:RobotControlView x:Name="Control" DataContext="{Binding SelectedRobot}" Margin="8,0" />
+        </DockPanel>
+    </Grid>
+</Window>

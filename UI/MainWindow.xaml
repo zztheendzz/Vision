@@ -84,6 +84,7 @@
                 <Separator />
                 <MenuItem Header="Cấu hình thiết bị..." Click="OpenDeviceConfig_Click" />
                 <MenuItem Header="Bản đồ tín hiệu PLC..." Click="OpenPlcMap_Click" />
+                <MenuItem Header="Điều khiển robot + camera (cửa sổ thả nổi)..." Click="OpenRobotControl_Click" />
             </MenuItem>
             <MenuItem Header="C_ông cụ">
                 <MenuItem IsEnabled="False" Header="Tùy chọn..." />
@@ -108,11 +109,16 @@
 
                 <Button Content="&#9654; Chạy một lần" Command="{Binding Run.RunOnceCommand}" />
                 <Button Content="Học mẫu" Command="{Binding Run.TeachCommand}" />
+                <Button Content="Xem mẫu" Command="{Binding Run.PreviewModelCommand}"
+                        ToolTip="Tạo mẫu từ ảnh hiện có và vẽ đường viền lên ảnh nhưng KHÔNG lưu file. Chỉnh vùng xóa, ngưỡng tương phản rồi xem lại; ưng thì bấm Học mẫu để lưu" />
                 <Button Content="&#128247; Chạy từ camera" Command="{Binding Run.RunFromCameraCommand}"
                         ToolTip="Chụp ảnh từ camera đang kết nối, chạy đồ thị rồi lưu kết quả (F6)" />
                 <Button Content="Học mẫu từ camera" Command="{Binding Run.TeachFromCameraCommand}" />
                 <Button Content="{Binding Run.AutoButtonText}" Command="{Binding Run.ToggleAutoCommand}"
                         ToolTip="Chạy tự động mỗi khi PLC báo (bit yêu cầu chụp lên 1), rồi báo kết quả về PLC" />
+                <TextBlock Text="FOV:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                <TextBox Text="{Binding Run.Fov, UpdateSourceTrigger=PropertyChanged}" Width="32" VerticalAlignment="Center"
+                         ToolTip="Vị trí chụp khi chạy / học mẫu bằng tay. Đường dẫn mẫu có {FOV} sẽ thay bằng số này. Chạy tự động: lấy từ thanh ghi FOV của PLC." />
                 <CheckBox Content="Lưu vào" IsChecked="{Binding Run.SaveResults}" VerticalAlignment="Center" Margin="8,0,4,0"
                           ToolTip="Lưu ảnh và kết quả mỗi lần chạy từ camera" />
                 <TextBox Text="{Binding Run.SaveFolder, UpdateSourceTrigger=LostFocus}" Width="130" VerticalAlignment="Center" />
@@ -299,9 +305,15 @@
                     <RowDefinition Height="*" MinHeight="120" />
                 </Grid.RowDefinitions>
                 <views:ImageViewerPanel Grid.Row="0" Title="Ảnh gốc" Display="{Binding Run.Original}"
-                                       Roi="{Binding Roi.Current}" RoiChangedCommand="{Binding Roi.ApplyCommand}" />
+                                       Roi="{Binding Roi.OriginalRoi}" RoiChangedCommand="{Binding Roi.ApplyCommand}"
+                                       EraseAreas="{Binding Roi.OriginalErase}" EraseCommand="{Binding Roi.AddEraseAreaCommand}"
+                                       ClearEraseCommand="{Binding Roi.ClearEraseAreasCommand}" />
                 <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" />
-                <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}" />
+                <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}"
+                                       RoiToggleLabel="Vẽ ROI ở đây" RoiToggleChecked="{Binding Roi.OnProcessed, Mode=TwoWay}"
+                                       Roi="{Binding Roi.ProcessedRoi}" RoiChangedCommand="{Binding Roi.ApplyCommand}"
+                                       EraseAreas="{Binding Roi.ProcessedErase}" EraseCommand="{Binding Roi.AddEraseAreaCommand}"
+                                       ClearEraseCommand="{Binding Roi.ClearEraseAreasCommand}" />
             </Grid>
         </Grid>
     </DockPanel>

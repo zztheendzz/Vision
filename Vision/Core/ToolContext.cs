@@ -15,19 +15,44 @@ namespace Vision.Core
         /// <summary>false khi chạy sản xuất: tool bỏ qua việc tạo bản copy để hiển thị.</summary>
         public bool NeedDisplay { get; }
 
+        /// <summary>
+        /// Vị trí chụp (FOV) của lượt này: PLC ghi vào thanh ghi FOV (vd D600), hoặc người dùng nhập khi chạy tay.
+        /// Âm = chưa chọn. Đường dẫn có chữ {FOV} (mẫu, hiệu chuẩn) sẽ được thay bằng số này.
+        /// </summary>
+        public int Fov { get; }
+
+        /// <summary>Thay {FOV} trong đường dẫn bằng số FOV của lượt. Không có {FOV} thì giữ nguyên. Có {FOV} mà chưa chọn FOV thì báo lỗi.</summary>
+        public bool TryResolvePath(string template, out string path, out string? error)
+        {
+            path = template;
+            error = null;
+            const string key = "{FOV}";
+            if (template.IndexOf(key, StringComparison.OrdinalIgnoreCase) < 0) return true;
+            if (Fov < 0)
+            {
+                error = $"Đường dẫn '{template}' có {key} nhưng lượt chạy này chưa có số FOV. " +
+                        "Chạy tay: nhập ô FOV trên thanh công cụ. Chạy tự động: kiểm tra 'Thanh ghi FOV' trong cài đặt PLC.";
+                return false;
+            }
+            path = template.Replace(key, Fov.ToString(), StringComparison.OrdinalIgnoreCase);
+            return true;
+        }
+
         public ToolContext(
             RunMode mode = RunMode.DryRun,
             CancellationToken cancellationToken = default,
             IVisionLogger? logger = null,
-            bool needDisplay = true)
+            bool needDisplay = true,
+            int fov = -1)
         {
             Mode = mode;
             CancellationToken = cancellationToken;
             Logger = logger ?? NullVisionLogger.Instance;
             NeedDisplay = needDisplay;
+            Fov = fov;
         }
 
         public ToolContext WithLogger(IVisionLogger logger)
-            => new(Mode, CancellationToken, logger, NeedDisplay);
+            => new(Mode, CancellationToken, logger, NeedDisplay, Fov);
     }
 }

@@ -59,6 +59,7 @@ namespace UI.ViewModels.RunAndDisplay
         [NotifyCanExecuteChangedFor(nameof(RunFromCameraCommand))]
         [NotifyCanExecuteChangedFor(nameof(TeachFromCameraCommand))]
         [NotifyCanExecuteChangedFor(nameof(TeachCommand))]
+        [NotifyCanExecuteChangedFor(nameof(PreviewModelCommand))]
         private bool _isAuto;
 
         public string AutoButtonText => IsAuto ? "\u25A0 Dừng tự động" : "\u25B6 Tự động (PLC)";
@@ -67,6 +68,9 @@ namespace UI.ViewModels.RunAndDisplay
 
         /// <summary>Lưu ảnh và kết quả của mỗi lần "Chạy từ camera" vào ổ đĩa.</summary>
         [ObservableProperty] private bool _saveResults = true;
+
+        /// <summary>Vị trí chụp (FOV) khi chạy / học mẫu bằng tay. Chạy tự động thì lấy số FOV từ PLC. Chọn file mẫu theo {FOV} trong đường dẫn.</summary>
+        [ObservableProperty] private int _fov = 1;
         [ObservableProperty] private string _saveFolder = @"D:\VisionData";
 
         private long _cycleId;
@@ -76,6 +80,7 @@ namespace UI.ViewModels.RunAndDisplay
         [NotifyCanExecuteChangedFor(nameof(RunFromCameraCommand))]
         [NotifyCanExecuteChangedFor(nameof(TeachFromCameraCommand))]
         [NotifyCanExecuteChangedFor(nameof(TeachCommand))]
+        [NotifyCanExecuteChangedFor(nameof(PreviewModelCommand))]
         [NotifyCanExecuteChangedFor(nameof(StopCommand))]
         private bool _isRunning;
 
@@ -121,6 +126,7 @@ namespace UI.ViewModels.RunAndDisplay
         public RunViewModel(GraphEditorViewModel editor, IDialogService dialogs, OffsetDispatcher dispatcher, DeviceManager devices)
         {
             _devices = devices;
+            Vision.Core.ParamChoices.Register(Vision.Core.ParamChoices.Cameras, () => _devices.CameraNames);
             _editor = editor;
             _dialogs = dialogs;
             _dispatcher = dispatcher;
@@ -162,6 +168,16 @@ namespace UI.ViewModels.RunAndDisplay
                 return Task.CompletedTask;
             return UsesCamera() ? RunCoreAsync(RunMode.Teach, GrabFromCamerasAsync) : RunCoreAsync(RunMode.Teach);
         }
+
+        /// <summary>
+        /// Xem mẫu: học mẫu thử, vẽ đường viền lên ảnh nhưng KHÔNG ghi file mẫu. Dùng để chỉnh vùng xóa viền và ngưỡng
+        /// tương phản của FindShape cho đến khi ưng, rồi mới bấm Học mẫu để lưu.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanRun))]
+        private Task PreviewModelAsync()
+            => UsesCamera()
+                ? RunCoreAsync(RunMode.Teach, GrabFromCamerasAsync, previewOnly: true)
+                : RunCoreAsync(RunMode.Teach, previewOnly: true);
 
         /// <summary>Chụp ảnh từ các camera đang kết nối rồi chạy đồ thị (node "Camera Image" nhận ảnh); xong thì lưu kết quả.</summary>
         [RelayCommand(CanExecute = nameof(CanRun))]
@@ -215,7 +231,7 @@ namespace UI.ViewModels.RunAndDisplay
         /// interactive=false (chạy tự động): không hiện hộp thoại báo lỗi, chỉ ghi log và trạng thái.
         /// </summary>
         private async Task<RunVerdict?> RunCoreAsync(
-            RunMode mode, Func<CancellationToken, Task<Dictionary<string, HImage>>>? imageSource = null, bool interactive = true)
+            RunMode mode, Func<CancellationToken, Task<Dictionary<string, HImage>>>? imageSource = null, bool interactive = true, int? fov = null, bool previewOnly = false)
         {
             var graph = _editor.Model;
             if (graph.Nodes.Count == 0)
@@ -234,14 +250,20 @@ namespace UI.ViewModels.RunAndDisplay
             _editor.ResetRunState();
             StatusText = "Đang chạy...";
 
-            var options = new RunOptions { Mode = mode, NeedDisplay = true };
+            var options = new RunOptions { Mode = mode, NeedDisplay = true, Fov = fov ?? Fov };
+            if (previewOnly)
+            {
+                // Chỉ xem trước: các node FindShape tạo mẫu và vẽ viền nhưng không ghi file (chỉ cho lượt này)
+                foreach (var shapeNode in graph.Nodes.Where(n => n.ToolName == "FindShape"))
+                    options.SetParameter(shapeNode, "PreviewOnly", true);
+            }
             Dictionary<string, HImage>? sources = null;       // ảnh camera của lượt này (ta sở hữu, Dispose ở cuối)
             var startedAt = DateTime.Now;
             var logger = new UiLogger(PostLog);
             var executor = new GraphExecutor(logger);
             executor.NodeFinished += OnNodeFinished;
 
-            AppendLog($"--- {(mode == RunMode.Teach ? "Học mẫu" : "Chạy")} {DateTime.Now:HH:mm:ss} ({ModeName(mode)}) ---");
+            AppendLog($"--- {(previewOnly ? "Xem trước mẫu (không lưu)" : mode == RunMode.Teach ? "Học mẫu" : "Chạy")} {DateTime.Now:HH:mm:ss} ({ModeName(mode)}), FOV {options.Fov} ---");
             var sw = Stopwatch.StartNew();
             RunVerdict? verdict = null;
 
@@ -465,10 +487,10 @@ namespace UI.ViewModels.RunAndDisplay
         }
 
         /// <summary>Thread nền gọi khi PLC yêu cầu; chạy lượt ở UI thread (lượt chạm vào giao diện) và trả về kết luận.</summary>
-        private async Task<RunVerdict> RunAutoCycleAsync(CancellationToken ct)
+        private async Task<RunVerdict> RunAutoCycleAsync(int fov, CancellationToken ct)
         {
             var dispatcher = System.Windows.Application.Current.Dispatcher;
-            var verdict = await await dispatcher.InvokeAsync(() => RunCoreAsync(Mode, GrabFromCamerasAsync, interactive: false));
+            var verdict = await await dispatcher.InvokeAsync(() => RunCoreAsync(Mode, GrabFromCamerasAsync, interactive: false, fov: fov));
             return verdict ?? RunVerdict.Error;     // không chạy được hoặc bị dừng giữa chừng: báo lỗi cho PLC
         }
 

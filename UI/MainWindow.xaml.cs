@@ -13,6 +13,7 @@ namespace UI
         private readonly MainViewModel _viewModel;
         private DeviceConfigWindow? _deviceWindow;
         private AutoCalibrationWindow? _autoCalWindow;
+        private RobotControlWindow? _robotWindow;
         private PlcMapWindow? _plcMapWindow;
 
         public MainWindow()
@@ -48,6 +49,26 @@ namespace UI
             _deviceWindow.Closed += (_, _) => _deviceWindow = null;
             _deviceWindow.Show();
         }
+
+        /// <summary>Mở cửa sổ thả nổi "Robot + camera" (chỉ một cửa sổ). Không khóa cửa sổ chính, kéo đặt cạnh ảnh được.</summary>
+        public void OpenRobotControl(ViewModels.Device.DeviceViewModel? robot = null)
+        {
+            if (_robotWindow != null)
+            {
+                _robotWindow.Activate();
+                return;
+            }
+
+            _robotWindow = new RobotControlWindow
+            {
+                Owner = this,
+                DataContext = new ViewModels.Device.RobotControlViewModel(_viewModel.Devices, robot)
+            };
+            _robotWindow.Closed += (_, _) => _robotWindow = null;
+            _robotWindow.Show();
+        }
+
+        private void OpenRobotControl_Click(object sender, RoutedEventArgs e) => OpenRobotControl();
 
         /// <summary>Output tự cuộn xuống dòng mới nhất.</summary>
         private void OutputBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)

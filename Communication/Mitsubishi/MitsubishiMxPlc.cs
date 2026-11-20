@@ -1,4 +1,5 @@
-﻿using Communication.Configuration;
+﻿#if MX_COMPONENT
+using Communication.Configuration;
 using Communication.Drivers;
 using System;
 using System.Collections.Generic;
@@ -183,3 +184,4 @@ namespace Communication.Mitsubishi
         public void Dispose() { Disconnect(); _lock.Dispose(); }
     }
 }
+#endif

@@ -18,6 +18,17 @@ namespace UI.Views
         {
             InitializeComponent();
 
+            // Bảng chụp tự cuộn tới dòng mới nhất
+            DataContextChanged += (_, e) =>
+            {
+                if (e.NewValue is ViewModels.RunAndDisplay.AutoCalibrationViewModel vm)
+                    vm.Captures.CollectionChanged += (_, args) =>
+                    {
+                        if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && vm.Captures.Count > 0)
+                            CaptureGrid.ScrollIntoView(vm.Captures[^1]);
+                    };
+            };
+
             // Robot đang tự chạy thì không cho đóng cửa sổ: phải bấm Dừng trước
             Closing += (_, e) =>
             {

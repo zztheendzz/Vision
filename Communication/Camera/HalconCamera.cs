@@ -6,7 +6,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-
+using System.Windows.Media.Animation;
+using MvCameraControl;
 namespace Communication.Camera
 {
     /// <summary>
@@ -47,6 +48,7 @@ namespace Communication.Camera
         /// </summary>
         public bool IsConnected
         {
+            
             get { lock (_lockObj) { return _hAcqHandle != null && !_linkLost; } }
         }
 
@@ -77,6 +79,8 @@ namespace Communication.Camera
 
         private void WatchdogTick()
         {
+
+
             if (_linkLost || _disposed) return;
 
             if (LiveTimeoutSeconds > 0 && _isGrabbing && (DateTime.UtcNow - _lastFrameUtc).TotalSeconds > LiveTimeoutSeconds)
@@ -176,6 +180,30 @@ namespace Communication.Camera
         /// Quét tất cả Camera GigE Vision đang kết nối trong mạng LAN.
         /// </summary>
         /// <returns>Danh sách tên/địa chỉ các camera tìm thấy.</returns>
+        /// <summary>Camera tìm thấy: Id để ghi vào ô "Thiết bị" (đưa cho OpenFramegrabber), Display để người dùng chọn.</summary>
+        public sealed record FoundCamera(string Id, string Display);
+
+        /// <summary>Quét camera và tách chuỗi HALCON ("| device:... | unique_name:... |") thành Id + tên dễ đọc (model, serial/unique_name).</summary>
+        public static List<FoundCamera> ScanCameraInfos(out string error)
+        {
+            var found = new List<FoundCamera>();
+            foreach (string raw in ScanCameras(out error))
+            {
+                var parts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string seg in raw.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    int colon = seg.IndexOf(':');
+                    if (colon > 0) parts[seg[..colon].Trim()] = seg[(colon + 1)..].Trim();
+                }
+
+                string id = parts.TryGetValue("unique_name", out var u) && u.Length > 0 ? u : raw;
+                string model = parts.TryGetValue("device", out var d) ? d : parts.TryGetValue("model", out var m) ? m : "";
+                string display = model.Length > 0 && model != id ? $"{model}  [{id}]" : id;
+                found.Add(new FoundCamera(id, display));
+            }
+            return found;
+        }
+
         public static List<string> ScanCameras(out string error)
         {
             error = null;
@@ -841,10 +869,11 @@ namespace Communication.Camera
         #endregion
 
         #region Dispose
-
+        
         // Thực hiện giao diện IDisposable tiêu chuẩn để giải phóng tài nguyên an toàn
         public void Dispose()
         {
+
             Dispose(true);
             GC.SuppressFinalize(this);
         }
@@ -863,6 +892,5 @@ namespace Communication.Camera
         }
 
         #endregion
-
-    } 
+    }
 }

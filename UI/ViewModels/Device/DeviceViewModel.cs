@@ -284,8 +284,28 @@ namespace UI.ViewModels.Device
 
         public void Dispose()
         {
+            StopJog();
             DetachCamera();
             _owner.Manager.Disconnect(Id);
+        }
+
+        /// <summary>
+        /// Thoát app: dừng nhích, TRẢ quyền điều khiển robot (OperationEnabled = false) và ghi bit quyền = 1 cho PLC.
+        /// Phải gọi TRƯỚC khi ngắt PLC. Mỗi bước có giới hạn 2 giây để thoát app không bị treo khi mất kết nối.
+        /// </summary>
+        public async Task ReleaseOnExitAsync()
+        {
+            if (Config.Type != DeviceType.Robot) return;
+            StopJog();
+
+            if (_owner.Manager.GetLink(Id) is IRobotDriver robot && robot.IsConnected)
+            {
+                try { await robot.ReleaseControlAsync().WaitAsync(TimeSpan.FromSeconds(2)); }
+                catch (Exception) { /* không trả được thì vẫn đi tiếp để ghi bit cho PLC */ }
+            }
+
+            try { await WriteAuthorityAsync(plcControls: true).WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch (Exception) { /* PLC đã mất kết nối */ }
         }
 
         // ---------- PLC: đọc thử ----------
@@ -597,35 +617,84 @@ namespace UI.ViewModels.Device
             Message = reply.Accepted ? reply.Raw : reply.Error ?? "Gửi thử độ lệch thất bại";
         }
 
-        /// <summary>axis: "X+", "X-", "Y+", "Y-", "Z+", "Z-", "R+", "R-" (R = xoay Rz).</summary>
-        [RelayCommand]
-        private async Task JogAsync(string? axis)
+        // ---------- Nhích liên tục: giữ nút để chạy, thả nút thì dừng ----------
+
+        [ObservableProperty] private int _jogRepeatMs = 150;
+        private CancellationTokenSource? _jogCts;
+
+        /// <summary>
+        /// Bắt đầu nhích theo trục: axis "X+", "X-", "Y+", "Y-", "Z+", "Z-", "R+", "R-" (R = xoay Rz).
+        /// Bấm nhanh = một bước; giữ nút quá 0,35 s thì lặp liên tục mỗi "Lặp (ms)" cho đến khi gọi StopJog (thả nút).
+        /// </summary>
+        public void StartJog(string? axis)
         {
+            StopJog();
             if (string.IsNullOrEmpty(axis) || axis.Length != 2) return;
-            if (!TryGetRobot(out var robot)) return;
-            if (!await EnsureAppControlAsync()) return;
+            var cts = new CancellationTokenSource();
+            _jogCts = cts;
+            _ = JogLoopAsync(axis, cts.Token);
+        }
 
-            double sign = axis[1] == '-' ? -1 : 1;
-            double dx = 0, dy = 0, dz = 0, drz = 0;
-            switch (char.ToUpperInvariant(axis[0]))
+        /// <summary>Dừng nhích (thả nút, mất focus, đóng cửa sổ). Gọi nhiều lần cũng an toàn.</summary>
+        public void StopJog()
+        {
+            var cts = _jogCts;
+            _jogCts = null;
+            try { cts?.Cancel(); } catch (ObjectDisposedException) { }
+        }
+
+        private async Task JogLoopAsync(string axis, CancellationToken ct)
+        {
+            IRobotDriver? robot = null;
+            try
             {
-                case 'X': dx = sign * JogStepMm; break;
-                case 'Y': dy = sign * JogStepMm; break;
-                case 'Z': dz = sign * JogStepMm; break;
-                case 'R': drz = sign * JogStepDeg; break;
-                default: return;
+                if (!TryGetRobot(out var r)) return;
+                robot = r;
+                if (!await EnsureAppControlAsync()) return;
+
+                double sign = axis[1] == '-' ? -1 : 1;
+                double dx = 0, dy = 0, dz = 0, drz = 0;
+                switch (char.ToUpperInvariant(axis[0]))
+                {
+                    case 'X': dx = sign * JogStepMm; break;
+                    case 'Y': dy = sign * JogStepMm; break;
+                    case 'Z': dz = sign * JogStepMm; break;
+                    case 'R': drz = sign * JogStepDeg; break;
+                    default: return;
+                }
+
+                // Đặt tốc độ một lần (mặc định 10 %), không đặt lại ở mỗi bước để chuyển động liền mạch
+                var speed = await robot.SetSpeedAsync(SpeedPercent);
+                if (!speed.Accepted) { Message = speed.Error ?? "Không đặt được tốc độ"; return; }
+
+                int repeatMs = Math.Clamp(JogRepeatMs, 50, 2000);
+                int wait = 350;                                  // lần đầu chờ xem người dùng có giữ nút không
+                while (!ct.IsCancellationRequested)
+                {
+                    var reply = await robot.MoveRelativeAsync(dx, dy, dz, drz);
+                    if (!reply.Accepted) { Message = reply.Error ?? "Lệnh di chuyển thất bại"; return; }
+                    Message = reply.Raw;
+
+                    await Task.Delay(wait, ct);
+                    wait = repeatMs;
+                }
             }
-
-            // Đặt tốc độ chậm trước mỗi lần nhích (mặc định 10 %)
-            var speed = await robot.SetSpeedAsync(SpeedPercent);
-            if (!speed.Accepted) { Message = speed.Error ?? "Không đặt được tốc độ"; return; }
-
-            var reply = await robot.MoveRelativeAsync(dx, dy, dz, drz);
-            Message = reply.Accepted ? reply.Raw : reply.Error ?? "Lệnh di chuyển thất bại";
-            if (reply.Accepted)
+            catch (OperationCanceledException)
             {
-                await Task.Delay(600);        // lệnh không chờ robot đến nơi: đợi một chút rồi đọc lại vị trí
-                PositionText = await robot.GetPositionTextAsync();
+                // Thả nút: bình thường
+            }
+            catch (Exception ex)
+            {
+                Message = "Lỗi nhích robot: " + ex.Message;
+            }
+            finally
+            {
+                // Robot cần chút thời gian để dừng hẳn rồi mới đọc vị trí cuối
+                if (robot != null)
+                {
+                    try { await Task.Delay(400); PositionText = await robot.GetPositionTextAsync(); }
+                    catch (Exception) { /* mất kết nối: bỏ qua */ }
+                }
             }
         }
 
@@ -699,19 +768,19 @@ namespace UI.ViewModels.Device
         /// <summary>Ảnh đang xem trước. Ảnh thuộc về ViewModel này: nó tự Dispose khi thay ảnh mới hoặc ngắt kết nối.</summary>
         [ObservableProperty] private ImageDisplay _preview = ImageDisplay.Empty;
         [ObservableProperty] private bool _isLive;
-        [ObservableProperty] private string? _selectedFound;
+        [ObservableProperty] private HalconCamera.FoundCamera? _selectedFound;
 
-        public ObservableCollection<string> FoundCameras { get; } = new();
+        public ObservableCollection<HalconCamera.FoundCamera> FoundCameras { get; } = new();
 
         private HalconCamera? _camera;
         private int _framePending;     // 1 = giao diện còn đang vẽ ảnh trước, bỏ khung mới để không dồn hàng đợi
         private int _frameCount;
 
-        partial void OnSelectedFoundChanged(string? value)
+        partial void OnSelectedFoundChanged(HalconCamera.FoundCamera? value)
         {
-            if (string.IsNullOrEmpty(value)) return;
+            if (value == null) return;
             var field = Fields.FirstOrDefault(f => f.Def.Key == "DeviceId");
-            if (field != null) field.Text = value;         // ghi vào cấu hình + đánh dấu đã sửa
+            if (field != null) field.Text = value.Id;         // ghi vào cấu hình + đánh dấu đã sửa
         }
 
         [RelayCommand]
@@ -720,12 +789,13 @@ namespace UI.ViewModels.Device
             Message = "Đang quét camera...";
             var (list, error) = await Task.Run(() =>
             {
-                var l = HalconCamera.ScanCameras(out string? e);
+                var l = HalconCamera.ScanCameraInfos(out string? e);
                 return (l, e);
             });
 
             FoundCameras.Clear();
-            foreach (var name in list) FoundCameras.Add(name);
+            foreach (var cam in list) FoundCameras.Add(cam);
+            SelectedFound = list.FirstOrDefault(c => c.Id == Config.GetString("DeviceId"));
             Message = error ?? (list.Count == 0 ? "Không thấy camera nào" : $"Thấy {list.Count} camera");
         }
 
@@ -751,8 +821,12 @@ namespace UI.ViewModels.Device
         /// <summary>Khuôn đang mở (true), đóng (false) hoặc chưa biết (null). Khóa an toàn dựa vào đây.</summary>
         public bool? IsOpen { get; private set; }
 
+        /// <summary>Lệnh mở khuôn báo lỗi / không trả lời: khuôn nằm ngay trên và ngay dưới nó không được mở cho tới khi khuôn này mở / kiểm trạng thái lại được.</summary>
+        public bool OpenFaulted { get; private set; }
+
         private void SetOpen(bool open)
         {
+            OpenFaulted = false;
             IsOpen = open;
             FixtureStateText = open ? "Đang mở" : "Đang đóng";
         }
@@ -884,6 +958,12 @@ namespace UI.ViewModels.Device
             {
                 Message = "Lỗi: " + ex.Message;
                 Log("LỖI", ex.Message);
+                if (command is FixtureCommand.Open or FixtureCommand.OpenAll)
+                {
+                    OpenFaulted = true;                      // không trả lời / lỗi khi mở: coi như chưa rõ và khóa khuôn kề
+                    IsOpen = null;
+                    FixtureStateText = "Lỗi khi mở";
+                }
             }
             finally { FixtureBusy = false; }
         }
@@ -984,6 +1064,14 @@ namespace UI.ViewModels.Device
             var pass = Slots.FirstOrDefault(x => x.State == SlotState.Pass);
             if (pass != null) return $"{Name}: {pass.Title} đang PASS, chỉ khuôn FAIL / REPAIR mới được mở";
 
+            // Khuôn kề trên / kề dưới đang lỗi mở: không mở khuôn này
+            foreach (var d in AllFixtures())
+            {
+                if (d == this || !d.OpenFaulted) continue;
+                bool neighbour = (BelowNo > 0 && d.FixtureNo == BelowNo) || (d.BelowNo > 0 && d.BelowNo == FixtureNo);
+                if (neighbour) return $"{Name}: {d.Name} (khuôn {d.FixtureNo:00}) báo lỗi khi mở, khuôn kề trên / dưới không được mở";
+            }
+
             if (!ignoreBelow && BelowNo > 0)
             {
                 var below = AllFixtures().FirstOrDefault(d => d != this && d.FixtureNo == BelowNo);
@@ -1059,6 +1147,7 @@ namespace UI.ViewModels.Device
                 case FixtureCommand.Open:
                 case FixtureCommand.OpenAll:
                     if (r.Positive) SetOpen(true);
+                    else { OpenFaulted = true; FixtureStateText = "Lỗi khi mở"; }
                     break;
                 case FixtureCommand.Close:
                 case FixtureCommand.CloseAll:
@@ -1068,6 +1157,7 @@ namespace UI.ViewModels.Device
                     SetOpen(r.Positive);
                     break;
             }
+            if (command == FixtureCommand.Close && !r.Positive) { /* đóng lỗi không khóa khuôn kề */ }
 
             string verdict = r.Positive ? "OK" : "LỖI";
             Message = r.Slots.Length > 0 ? $"{command}: {verdict} (slot: {r.Slots})" : $"{command}: {verdict} ({reply})";

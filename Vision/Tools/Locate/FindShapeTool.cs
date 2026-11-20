@@ -12,6 +12,17 @@ using Vision.Tools.Registry;
 
 namespace Vision.Tools.Locate
 {
+    /// <summary>Cách so cực tính (sáng/tối) giữa mẫu và vật khi tìm.</summary>
+    public enum ShapeMetric
+    {
+        /// <summary>Vật phải có cùng chiều sáng/tối như mẫu.</summary>
+        UsePolarity,
+        /// <summary>Chấp nhận vật bị đảo toàn bộ sáng/tối so với mẫu.</summary>
+        IgnoreGlobalPolarity,
+        /// <summary>Chấp nhận đảo cực tính cục bộ (nền thay đổi sáng tối từng chỗ). Chậm hơn.</summary>
+        IgnoreLocalPolarity
+    }
+
     /// <summary>
     /// Tìm vật theo mẫu hình dạng (Halcon shape-based matching) và trả tư thế so với ảnh mẫu.
     ///
@@ -31,14 +42,21 @@ namespace Vision.Tools.Locate
     {
         private sealed record ReferenceFile(double Row, double Column, double AngleDeg);
 
-        private HShapeModel? _model;
-        private string? _loadedPath;
-        private DateTime _loadedStamp;
-        private Pose2D? _reference;
+        // Mỗi FOV một file mẫu: giữ sẵn trong bộ nhớ để đổi FOV giữa các lượt không phải nạp lại từ đĩa
+        private sealed class Loaded
+        {
+            public HShapeModel Model = null!;
+            public DateTime Stamp;
+            public Pose2D? Reference;
+        }
+
+        private readonly Dictionary<string, Loaded> _loaded = new(StringComparer.OrdinalIgnoreCase);
 
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]
         {
-            new PortDef("Image", typeof(HImage))
+            new PortDef("Image",  typeof(HImage)),
+            // Tùy chọn: nối Region (ví dụ từ SelectByRoi / Blob) thì chỉ học và chỉ tìm trong vùng đó; không nối thì học bằng ROI của tool, tìm toàn ảnh
+            new PortDef("Region", typeof(HRegion), Required: false)
         };
 
         public override IReadOnlyList<PortDef> Outputs { get; } = new[]
@@ -52,16 +70,37 @@ namespace Vision.Tools.Locate
         public override IReadOnlyList<ParamDef> Parameters { get; } = RoiRegionFactory.ParamDefs()
             .Concat(new[]
             {
-                new ParamDef("ModelPath",   typeof(string), "model.shm", Description: "File mẫu (ghi khi Học mẫu, đọc khi tìm)"),
+                new ParamDef("ModelPath",   typeof(string), "model.shm", Description: "File mẫu (ghi khi Học mẫu, đọc khi tìm). Nhiều vị trí chụp: dùng {FOV}, vd models/fov{FOV}.shm; FOV 1 dùng fov1.shm, FOV 2 dùng fov2.shm..."),
                 new ParamDef("MinScore",    typeof(double), 0.7, Min: 0.05, Max: 1.0, Description: "Điểm khớp tối thiểu để coi là thấy vật"),
                 new ParamDef("AngleStart",  typeof(double), -180.0, Min: -360, Max: 360, Description: "Góc xoay nhỏ nhất cần tìm (độ)"),
                 new ParamDef("AngleExtent", typeof(double), 360.0,  Min: 1, Max: 360, Description: "Bề rộng khoảng góc cần tìm (độ)"),
-                new ParamDef("Greediness",  typeof(double), 0.9, Min: 0, Max: 1, Description: "0 = kỹ nhưng chậm, 1 = nhanh nhưng có thể sót")
+                new ParamDef("Greediness",  typeof(double), 0.9, Min: 0, Max: 1, Description: "0 = kỹ nhưng chậm, 1 = nhanh nhưng có thể sót"),
+
+                // ----- Tinh chỉnh mẫu khi Học mẫu (xem trước bằng nút "Xem mẫu" rồi mới lưu) -----
+                new ParamDef("EraseAreas",  typeof(string), "", Description: "Vùng xóa viền: những chỗ không lấy đường viền vào mẫu. Thêm bằng nút 'Thêm vùng xóa' trên ảnh gốc, hoặc gõ: R row col length1 length2 phi; C row col radius"),
+                new ParamDef("ContrastLow",  typeof(double), 0.0, Min: 0, Max: 255, Description: "Ngưỡng tương phản thấp của viền (0 = tự động). Cùng với ContrastHigh: viền yếu hơn ngưỡng thấp bị bỏ"),
+                new ParamDef("ContrastHigh", typeof(double), 0.0, Min: 0, Max: 255, Description: "Ngưỡng tương phản cao (0 = tự động). Viền phải có chỗ mạnh hơn ngưỡng này mới được giữ. Tăng lên để bỏ viền nhiễu"),
+                new ParamDef("MinContourLength", typeof(double), 0.0, Min: 0, Description: "Chiều dài tối thiểu của một đường viền (pixel). Chỉ dùng khi đặt ContrastHigh. Tăng lên để bỏ các đoạn viền ngắn"),
+                new ParamDef("MinContrast", typeof(double), 0.0, Min: 0, Max: 255, Description: "Tương phản tối thiểu để một điểm ảnh được coi là viền khi tìm (0 = tự động). Đặt cao hơn nhiễu của ảnh. Đổi tham số này phải Học mẫu lại"),
+                new ParamDef("NumLevels",   typeof(int), 0, Min: 0, Max: 10, Description: "Số tầng kim tự tháp (0 = tự động). Vật nhỏ thì giảm; tìm chậm thì tăng"),
+                new ParamDef("Metric",      typeof(ShapeMetric), ShapeMetric.UsePolarity, Description: "Cách so cực tính sáng/tối: UsePolarity = vật phải cùng sáng/tối như mẫu, Ignore... = bỏ qua đảo cực tính"),
+                new ParamDef("PreviewOnly", typeof(bool), false, Description: "Chỉ xem trước mẫu khi Học mẫu: tạo mẫu và vẽ viền nhưng KHÔNG ghi file. Nút 'Xem mẫu' tự bật tham số này")
             })
             .ToArray();
 
         protected override void ValidateRules(VisionToolInput p, List<string> errors)
-            => RoiRegionFactory.Validate(p, errors);
+        {
+            RoiRegionFactory.Validate(p, errors);
+
+            if (ShapeEraseAreas.Parse(p.Get<string>("EraseAreas"), out string? eraseError) == null)
+                errors.Add(eraseError!);
+
+            double low = p.Get<double>("ContrastLow"), high = p.Get<double>("ContrastHigh");
+            if (high > 0 && (low <= 0 || low > high))
+                errors.Add("ContrastLow phải lớn hơn 0 và không lớn hơn ContrastHigh (hoặc để cả hai bằng 0 cho tự động)");
+            if (high <= 0 && low > 0)
+                errors.Add("Đã đặt ContrastLow thì phải đặt cả ContrastHigh");
+        }
 
         // Mẫu được nạp lười trong Execute (xem ghi chú ở trên), nên Initialize không làm gì
         protected override void OnInitialize(ToolContext context) { }
@@ -70,11 +109,14 @@ namespace Vision.Tools.Locate
 
         protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)
         {
-            string path = input.Get<string>("ModelPath");
-            if (string.IsNullOrWhiteSpace(path))
+            string template = input.Get<string>("ModelPath");
+            if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt ModelPath");
+            if (!context.TryResolvePath(template, out string path, out string? pathError))
+                return VisionToolResult.ConfigError(pathError!);
 
             var image = input.Get<HImage>("Image");                   // chỉ mượn
+            HRegion? region = input.TryGet<HRegion>("Region", out var r) && r != null && r.IsInitialized() ? r : null;
 
             // Mẫu hình dạng chỉ làm việc với ảnh 1 kênh. Ảnh màu phải qua RgbToGray trước
             int channels = image.CountChannels();
@@ -87,17 +129,17 @@ namespace Vision.Tools.Locate
             double greediness = input.Get<double>("Greediness");
 
             return context.Mode == RunMode.Teach
-                ? Teach(input, image, path, startRad, extentRad, greediness, context)
-                : Find(input, image, path, startRad, extentRad, greediness, context);
+                ? Teach(input, image, region, path, startRad, extentRad, greediness, context)
+                : Find(input, image, region, path, startRad, extentRad, greediness, context);
         }
 
         // ================= HỌC MẪU =================
 
         private VisionToolResult Teach(
-            VisionToolInput input, HImage image, string path,
+            VisionToolInput input, HImage image, HRegion? region, string path,
             double startRad, double extentRad, double greediness, ToolContext context)
         {
-            using var roi = RoiRegionFactory.Create(input);
+            using var roi = ShapeEraseAreas.BuildTrainRegion(input, region);   // ROI trừ các vùng xóa viền
             using var reduced = image.ReduceDomain(roi);
 
             // ROI mặc định (hàng 240, cột 320) có thể không nằm trên vật của bạn: báo rõ thay vì để Halcon báo lỗi khó hiểu
@@ -107,11 +149,26 @@ namespace Vision.Tools.Locate
                 if (area < 100)
                     return VisionToolResult.ConfigError(
                         $"ROI học mẫu nằm ngoài ảnh hoặc quá nhỏ (diện tích {area:F0} pixel). " +
-                        "Chọn node FindShape, kéo ROI lên vùng vật trên 'Ảnh gốc' rồi học mẫu lại.");
+                        "Chọn node FindShape, kéo ROI lên vùng vật trên 'Ảnh gốc' rồi học mẫu lại. (Nếu đã thêm vùng xóa: vùng xóa có thể đã phủ hết ROI.)");
             }
 
+            double cLow = input.Get<double>("ContrastLow"), cHigh = input.Get<double>("ContrastHigh");
+            HTuple contrast = cHigh > 0
+                ? new HTuple(new[] { cLow, cHigh, Math.Max(1.0, input.Get<double>("MinContourLength")) })
+                : new HTuple("auto");
+            double minContrast = input.Get<double>("MinContrast");
+            int numLevels = input.Get<int>("NumLevels");
+            string metric = input.Get<ShapeMetric>("Metric") switch
+            {
+                ShapeMetric.IgnoreGlobalPolarity => "ignore_global_polarity",
+                ShapeMetric.IgnoreLocalPolarity => "ignore_local_polarity",
+                _ => "use_polarity"
+            };
+
             HShapeModel model = reduced.CreateShapeModel(
-                "auto", startRad, extentRad, "auto", "auto", "use_polarity", "auto", "auto");
+                numLevels > 0 ? new HTuple(numLevels) : new HTuple("auto"),
+                startRad, extentRad, "auto", "auto", metric, contrast,
+                minContrast > 0 ? new HTuple(minContrast) : new HTuple("auto"));
 
             Pose2D reference;
             double score;
@@ -127,6 +184,23 @@ namespace Vision.Tools.Locate
                 }
                 reference = found.Value;
 
+                // Chỉ xem trước: vẽ viền, KHÔNG ghi file và KHÔNG đổi mẫu đang dùng
+                if (input.Get<bool>("PreviewOnly"))
+                {
+                    int contours;
+                    using (var xld = model.GetShapeModelContours(1)) contours = xld.CountObj();
+
+                    var preview = VisionToolResult.Ok(
+                            $"XEM TRƯỚC (chưa lưu): {contours} đường viền, tìm lại được với điểm {score:F2}. Ưng thì bấm Học mẫu để lưu.")
+                        .Add("Pose", reference)
+                        .Add("Reference", reference)
+                        .Add("Score", score);
+                    preview.Values["Contours"] = contours.ToString();
+                    if (context.NeedDisplay) preview.AddDisplay(ContourAt(model, reference));
+                    model.Dispose();
+                    return preview;
+                }
+
                 string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 model.WriteShapeModel(path);
@@ -138,14 +212,11 @@ namespace Vision.Tools.Locate
                 throw;
             }
 
-            // Thay mẫu trong bộ nhớ bằng mẫu vừa học
-            ReleaseCache();
-            _model = model;
-            _loadedPath = path;
-            _loadedStamp = File.GetLastWriteTimeUtc(path);
-            _reference = reference;
+            // Thay mẫu trong bộ nhớ bằng mẫu vừa học (chỉ mẫu của file này, các FOV khác giữ nguyên)
+            Drop(path);
+            _loaded[path] = new Loaded { Model = model, Stamp = File.GetLastWriteTimeUtc(path), Reference = reference };
 
-            var result = VisionToolResult.Ok($"Đã học mẫu, lưu vào {path}")
+            var result = VisionToolResult.Ok(context.Fov >= 0 ? $"Đã học mẫu FOV {context.Fov}, lưu vào {path}" : $"Đã học mẫu, lưu vào {path}")
                 .Add("Pose", reference)
                 .Add("Reference", reference)
                 .Add("Score", score);
@@ -157,28 +228,50 @@ namespace Vision.Tools.Locate
         // ================= TÌM =================
 
         private VisionToolResult Find(
-            VisionToolInput input, HImage image, string path,
+            VisionToolInput input, HImage image, HRegion? region, string path,
             double startRad, double extentRad, double greediness, ToolContext context)
         {
-            if (!EnsureLoaded(path, out string? error))
+            if (!EnsureLoaded(path, out Loaded? loaded, out string? error))
                 return VisionToolResult.ConfigError(error!);
 
             double minScore = input.Get<double>("MinScore");
-            var pose = FindOne(_model!, image, startRad, extentRad, minScore, greediness, out double score);
-            if (pose == null)
-                return VisionToolResult.NoResult(DescribeMiss(_model!, image, startRad, extentRad, greediness, minScore));
+
+            // Có Region nối vào: chỉ tìm trong vùng đó
+            HImage? limited = null;
+            try
+            {
+                var searchImage = image;
+                if (region != null)
+                {
+                    if (region.CountObj() == 0 || region.AreaCenter(out double _, out double _) < 1)
+                        return VisionToolResult.NoResult("Region đầu vào rỗng, không có vùng để tìm");
+                    limited = image.ReduceDomain(region);
+                    searchImage = limited;
+                }
+
+                var pose = FindOne(loaded!.Model, searchImage, startRad, extentRad, minScore, greediness, out double score);
+                if (pose == null)
+                    return VisionToolResult.NoResult(DescribeMiss(loaded!.Model, searchImage, startRad, extentRad, greediness, minScore));
+                return BuildFound(loaded!, pose.Value, score, context);
+            }
+            finally { limited?.Dispose(); }
+        }
+
+        private static VisionToolResult BuildFound(Loaded loaded, Pose2D poseValue, double score, ToolContext context)
+        {
+            var pose = (Pose2D?)poseValue;
 
             var result = VisionToolResult.Ok($"Điểm {score:F2}, góc {pose.Value.AngleDeg:F2}°")
                 .Add("Pose", pose.Value)
                 .Add("Score", score);
-            if (_reference is { } reference) result.Add("Reference", reference);
+            if (loaded.Reference is { } reference) result.Add("Reference", reference);
 
             result.Values["Row"] = pose.Value.Row.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
             result.Values["Column"] = pose.Value.Column.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
             result.Values["Angle"] = pose.Value.AngleDeg.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
             result.Values["Score"] = score.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
 
-            if (context.NeedDisplay) result.AddDisplay(ContourAt(_model!, pose.Value));
+            if (context.NeedDisplay) result.AddDisplay(ContourAt(loaded.Model, pose.Value));
             return result;
         }
 
@@ -233,41 +326,49 @@ namespace Vision.Tools.Locate
 
         // ================= NẠP / LƯU MẪU =================
 
-        private bool EnsureLoaded(string path, out string? error)
+        private bool EnsureLoaded(string path, out Loaded? loaded, out string? error)
         {
             error = null;
+            loaded = null;
             if (!File.Exists(path))
             {
-                error = $"Chưa học mẫu: không thấy file '{path}'. Hãy bấm 'Học mẫu' trước.";
+                error = $"Chưa học mẫu: không thấy file '{path}'. Hãy bấm 'Học mẫu' trước" +
+                        (path.IndexOf("fov", StringComparison.OrdinalIgnoreCase) >= 0 ? " (đúng FOV này)." : ".");
                 return false;
             }
 
             var stamp = File.GetLastWriteTimeUtc(path);
-            if (_model != null && _loadedPath == path && _loadedStamp == stamp) return true;
+            if (_loaded.TryGetValue(path, out var cached) && cached.Stamp == stamp)
+            {
+                loaded = cached;
+                return true;
+            }
 
-            ReleaseCache();                                           // đổi file hoặc file mới được ghi: nạp lại
+            Drop(path);                                               // file mới được ghi: nạp lại
             try
             {
-                _model = new HShapeModel(path);
+                loaded = new Loaded { Model = new HShapeModel(path), Stamp = stamp, Reference = ReadReference(path) };
             }
             catch (HalconException ex)
             {
+                loaded = null;
                 error = $"Không đọc được file mẫu '{path}': {ex.Message}";
                 return false;
             }
 
-            _loadedPath = path;
-            _loadedStamp = stamp;
-            _reference = ReadReference(path);
+            _loaded[path] = loaded;
             return true;
+        }
+
+        private void Drop(string path)
+        {
+            if (_loaded.Remove(path, out var old)) old.Model.Dispose();
         }
 
         private void ReleaseCache()
         {
-            _model?.Dispose();
-            _model = null;
-            _loadedPath = null;
-            _reference = null;
+            foreach (var l in _loaded.Values) l.Model.Dispose();
+            _loaded.Clear();
         }
 
         private static string ReferencePath(string modelPath) => modelPath + ".ref.json";

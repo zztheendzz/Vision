@@ -16,6 +16,19 @@
             <Border DockPanel.Dock="Top" Style="{StaticResource PanelTitleBar}" Padding="8,2">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <!-- Ô chọn đặt ROI ở khung này (chỉ hiện khi RoiToggleLabel có chữ) -->
+                        <CheckBox x:Name="RoiToggleBox" Visibility="Collapsed" VerticalAlignment="Center" Margin="0,0,8,0"
+                                  Checked="RoiToggle_Changed" Unchecked="RoiToggle_Changed"
+                                  ToolTip="Vẽ / kéo ROI của node đang chọn ngay trên ảnh ở khung này thay vì ảnh gốc" />
+                        <!-- Xóa viền khi học mẫu (chỉ hiện khi node đang chọn có tham số EraseAreas, vd FindShape) -->
+                        <Button x:Name="EraseRectButton" Content="+ Xóa ▭" Click="EraseRect_Click" Visibility="Collapsed"
+                                ToolTip="Thêm vùng chữ nhật: đường viền nằm trong vùng này sẽ KHÔNG vào mẫu. Kéo, đổi cỡ rồi bấm Xác nhận" />
+                        <Button x:Name="EraseCircleButton" Content="+ Xóa ○" Click="EraseCircle_Click" Visibility="Collapsed"
+                                ToolTip="Thêm vùng tròn không lấy viền" />
+                        <Button x:Name="EraseOkButton" Content="Xác nhận xóa" Click="EraseOk_Click" Visibility="Collapsed" />
+                        <Button x:Name="EraseCancelButton" Content="Hủy" Click="EraseCancel_Click" Visibility="Collapsed" />
+                        <Button x:Name="EraseClearButton" Content="Bỏ hết vùng xóa" Click="EraseClear_Click" Visibility="Collapsed"
+                                ToolTip="Xóa danh sách vùng xóa viền của node đang chọn" />
                         <Button Content="Vừa khung" Click="FitButton_Click" />
                     </StackPanel>
                     <TextBlock VerticalAlignment="Center">

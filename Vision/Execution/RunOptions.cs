@@ -23,6 +23,9 @@ namespace Vision.Execution
         /// <summary>true: tool tạo bản copy để hiển thị (khi chỉnh/thử). false: bỏ qua cho nhanh (khi sản xuất).</summary>
         public bool NeedDisplay { get; set; } = true;
 
+        /// <summary>Vị trí chụp (FOV) của lượt này. Âm = không dùng. Xem ToolContext.Fov.</summary>
+        public int Fov { get; set; } = -1;
+
         public VisionToolInput Seed { get; } = new();
 
         public RunOptions SetSeed<T>(string key, T value)

@@ -113,6 +113,10 @@ namespace Communication.Drivers
         public IReadOnlyList<(DeviceConfig Config, IPlcDriver Driver)> ConnectedPlcs()
             => Connected<IPlcDriver>(DeviceType.PLC);
 
+        /// <summary>Tên các camera đã khai báo trong cài đặt (kể cả chưa nối), để chọn ở tool Camera Image.</summary>
+        public IReadOnlyList<string> CameraNames
+            => _catalog.Devices.Where(d => d.Type == DeviceType.Camera).Select(d => d.Name).ToList();
+
         /// <summary>Cấu hình các robot (kể cả robot chưa nối), để biết cách gửi độ bù khi robot nhận qua PLC.</summary>
         public IReadOnlyList<DeviceConfig> RobotConfigs
             => _catalog.Devices.Where(d => d.Type == DeviceType.Robot).ToList();

@@ -1,5 +1,6 @@
 ﻿
 using System.Windows;
+using System.Windows.Controls;
 
 
 namespace UI.Views
@@ -9,6 +10,13 @@ namespace UI.Views
         public DeviceConfigWindow()
         {
             InitializeComponent();
+
+            // Cửa sổ mất focus hoặc bị khóa giữa lúc đang giữ nút thì dừng robot
+            Deactivated += (_, _) =>
+            {
+                if (DataContext is ViewModels.Device.DeviceConfigViewModel root)
+                    foreach (var d in root.Devices) d.StopJog();
+            };
 
             // Đóng khi còn thay đổi chưa lưu: hỏi Lưu / Không lưu / Hủy
             Closing += (_, e) =>

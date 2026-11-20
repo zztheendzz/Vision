@@ -111,11 +111,15 @@ namespace Communication.Configuration
 
         /// <summary>
         /// Thiết bị này có nối thật không (không phải mô phỏng).
-        /// PLC: Chế độ Mitsubishi hoặc MX Component. Robot: Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera: giao thức GigE Vision. Máy quét: chưa nối.
+        /// PLC: Chế độ Mitsubishi (hoặc MX Component khi bật MX_COMPONENT). Robot: Mitsubishi. Khuôn test: khác Simulated. PC: TCP Client. Camera: giao thức GigE Vision. Máy quét: chưa nối.
         /// </summary>
         public bool IsMeantToConnect(DeviceConfig d) => d.Type switch
         {
+#if MX_COMPONENT
             DeviceType.PLC => d.GetString(DeviceSchemas.KeyMode) is DeviceSchemas.Mitsubishi or DeviceSchemas.MxComponent,
+#else
+            DeviceType.PLC => d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Mitsubishi,
+#endif
             DeviceType.Robot => d.GetString(DeviceSchemas.KeyMode) == DeviceSchemas.Mitsubishi,
             DeviceType.Fixture => GetGroupValue(d.Type, DeviceSchemas.KeyMode) != DeviceSchemas.Simulated,
             DeviceType.PC => GetGroupValue(d.Type, DeviceSchemas.KeyMode) == "TCP Client",
@@ -223,6 +227,17 @@ namespace Communication.Configuration
                     d.Name = NextName(d.Type);
                     notes.Add($"Đã đổi tên '{old}' thành '{d.Name}' (trống hoặc trùng).");
                 }
+
+#if !MX_COMPONENT
+                // MX Component đang tắt mà file cấu hình còn chế độ đó: chuyển về giả lập, không để ô chọn trống
+                if (d.Type == DeviceType.PLC && d.Values.TryGetValue(DeviceSchemas.KeyMode, out var mode)
+                    && mode == DeviceSchemas.MxComponent)
+                {
+                    d.Values[DeviceSchemas.KeyMode] = DeviceSchemas.Simulated;
+                    d.Values.Remove("StationNo");
+                    notes.Add($"{d.Name}: chế độ MX Component đang tắt, đã chuyển sang Simulated. Chọn lại Mitsubishi và nhập IP của PLC để nối thật.");
+                }
+#endif
 
                 if (d.SourcePlcId is Guid plc && !Devices.Any(x => x.Id == plc && x.Type == DeviceType.PLC))
                 {

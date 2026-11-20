@@ -22,6 +22,8 @@ namespace UI.ViewModels.ToolboxAndParam
             ["PlaceOffsetConvention.AboutRobotOrigin"] = "Xoay điểm đặt quanh GỐC robot rồi dịch (Dx, Dy). Phải nhập PlaceX / PlaceY / PlaceRz.",
         };
         private readonly string _enumName;
+        private readonly bool _dynamic;
+        private const string EmptyChoice = "(mặc định: camera đầu tiên)";
 
         /// <summary>Giải thích ngắn lựa chọn đang chọn (rỗng nếu không có).</summary>
         public string Help => HelpTexts.TryGetValue($"{_enumName}.{_selected}", out var text) ? text : "";
@@ -36,7 +38,7 @@ namespace UI.ViewModels.ToolboxAndParam
                 if (value != null && SetProperty(ref _selected, value))
                 {
                     OnPropertyChanged(nameof(Help));
-                    TrySetValue(value);          // ParamDef.Coerce đổi chữ thành enum
+                    TrySetValue(_dynamic && value == EmptyChoice ? "" : value);          // ParamDef.Coerce đổi chữ thành enum
                 }
             }
         }
@@ -44,15 +46,33 @@ namespace UI.ViewModels.ToolboxAndParam
         public EnumParameterViewModel(VisionNode node, ParamDef definition) : base(node, definition)
         {
             _enumName = definition.Type.Name;
+            if (definition.ChoicesKey != null)
+            {
+                // Chuỗi chọn từ danh sách động (tên camera...). Mục đầu = để trống.
+                var list = new List<string> { EmptyChoice };
+                list.AddRange(ParamChoices.Get(definition.ChoicesKey));
+                string current = Node.Parameters[Name]?.ToString() ?? "";
+                if (current.Length > 0 && !list.Contains(current)) list.Add(current);   // tên cũ không còn trong cài đặt: vẫn hiện để thấy
+                Choices = list;
+                _dynamic = true;
+                _selected = current.Length == 0 ? EmptyChoice : current;
+                return;
+            }
             Choices = Enum.GetNames(definition.Type);
             _selected = Read();
         }
 
         public override void Reload()
         {
-            SetProperty(ref _selected, Read(), nameof(Selected));
+            SetProperty(ref _selected, _dynamic ? DynamicRead() : Read(), nameof(Selected));
             OnPropertyChanged(nameof(Help));
             ErrorMessage = "";
+        }
+
+        private string DynamicRead()
+        {
+            string v = Node.Parameters[Name]?.ToString() ?? "";
+            return v.Length == 0 ? EmptyChoice : v;
         }
 
         private string Read() => Node.Parameters[Name]?.ToString() ?? Choices.FirstOrDefault() ?? "";
