@@ -101,6 +101,8 @@ namespace UI.ViewModels.RunAndDisplay
         [ObservableProperty] private double _maxRotationRmsMm = 0.3;
         /// <summary>Lệch góc tối đa giữa góc robot xoay và góc đo từ ảnh (độ). Vượt thì báo lại.</summary>
         [ObservableProperty] private double _maxAngleErrorDeg = 1.0;
+        /// <summary>Số lần chụp + đo tại mỗi điểm lưới, lấy trung bình để giảm nhiễu đo (1 = một lần). Chậm hơn tương ứng.</summary>
+        [ObservableProperty] private int _averages = 3;
 
         // ---------- 2. Chụp tại vị trí cố định ----------
         /// <summary>Điểm chụp. Để trống = máy đang ở sẵn vị trí chụp (không cần robot kết nối, không di chuyển).</summary>
@@ -221,7 +223,7 @@ namespace UI.ViewModels.RunAndDisplay
 
                 var plan = new AutoCalibrationPlan(center, CountX, CountY, StepMm, rotations,
                     CalSpeedPercent, CalSettleMs, MaxRmsMm, MinValidPoints, robot.PointSettings.RzAxis,
-                    MaxErrorMm, MaxRotationRmsMm, MaxAngleErrorDeg);
+                    MaxErrorMm, MaxRotationRmsMm, MaxAngleErrorDeg, Averages);
 
                 string? invalid = AutoCalibrator.Validate(plan);
                 if (invalid != null) { _dialogs.ShowError(invalid); return; }

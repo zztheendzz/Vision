@@ -109,6 +109,11 @@
                                 <TextBlock Text="Lệch góc tối đa (độ)" Foreground="{StaticResource VsMutedBrush}" TextWrapping="Wrap" />
                                 <TextBox Text="{Binding MaxAngleErrorDeg, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
+                            <StackPanel Margin="0,0,12,8" Width="140">
+                                <TextBlock Text="Số lần chụp trung bình / điểm" Foreground="{StaticResource VsMutedBrush}" TextWrapping="Wrap"
+                                           ToolTip="Chụp và đo nhiều lần tại mỗi điểm rồi lấy trung bình để giảm nhiễu đo. 3 đến 5 là hợp lý; chậm hơn tương ứng." />
+                                <TextBox Text="{Binding Averages, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
                         </WrapPanel>
 
                         <Button Content="Bắt đầu hiệu chuẩn tự động" HorizontalAlignment="Left" Width="240"

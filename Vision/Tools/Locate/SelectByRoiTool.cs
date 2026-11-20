@@ -96,7 +96,13 @@ namespace Vision.Tools.Locate
                 if (reduced != null) result.Add("Image", reduced);
                 result.Values["RoiArea"] = area.ToString("F0");
 
-                if (context.NeedDisplay) result.AddDisplay(final.CopyObj(1, -1));
+                if (context.NeedDisplay)
+                {
+                    // Hiển thị TOÀN ẢNH làm nền (Image ra đã thu hẹp miền nên chỉ còn phần trong ROI), vẽ ROI chồng lên:
+                    // người dùng thấy cả ảnh để kéo / đổi cỡ vùng chọn
+                    if (hasImage) result.AddDisplay(image.CopyImage());
+                    result.AddDisplay(final.CopyObj(1, -1));
+                }
                 return result;
             }
             catch

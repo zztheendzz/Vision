@@ -575,7 +575,9 @@ namespace UI.ViewModels.RunAndDisplay
             }
 
             // Ảnh nền: ảnh do chính node trả ra; không có (vd Threshold chỉ trả vùng) thì dùng ảnh gốc
-            HImage? background = (selRun.Result != null ? FindImage(selRun.Result) : null) ?? original;
+            // Tool có thể đưa ảnh riêng để hiển thị (SelectByRoi: toàn ảnh thay vì ảnh đã thu hẹp miền) thì ưu tiên ảnh đó
+            HImage? background = (selRun.Result?.DisplayObjects.OfType<HImage>().FirstOrDefault())
+                                 ?? (selRun.Result != null ? FindImage(selRun.Result) : null) ?? original;
 
             // Vẽ chồng: các đối tượng hiển thị của node (loại ảnh, vì ảnh đã là nền)
             IReadOnlyList<HObject> overlays = selRun.Result == null

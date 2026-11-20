@@ -32,6 +32,9 @@ namespace UI.ViewModels.ROI
         [NotifyPropertyChangedFor(nameof(OriginalRoi), nameof(ProcessedRoi), nameof(OriginalErase), nameof(ProcessedErase))]
         private bool _onProcessed;
 
+        private bool _autoSwitched;
+        private bool _savedOnProcessed;
+
         public RoiGeometry? OriginalRoi => OnProcessed ? null : Current;
         public RoiGeometry? ProcessedRoi => OnProcessed ? Current : null;
         public string? OriginalErase => OnProcessed ? null : EraseAreas;
@@ -55,6 +58,11 @@ namespace UI.ViewModels.ROI
         private void Reload()
         {
             var node = _editor.SelectedNode?.Model;
+
+            // Node Select By ROI: tự chuyển ROI sang ảnh xử lý (hiện toàn ảnh) để kéo vùng chọn dễ hơn; chọn node khác thì trả lại lựa chọn cũ
+            bool wantsFullImage = node?.ToolName == "SelectByRoi";
+            if (wantsFullImage && !_autoSwitched) { _savedOnProcessed = OnProcessed; _autoSwitched = true; OnProcessed = true; }
+            else if (!wantsFullImage && _autoSwitched) { _autoSwitched = false; OnProcessed = _savedOnProcessed; }
 
             // Đặt null rồi mới đặt giá trị mới: buộc khung ảnh dựng lại hình kể cả khi giá trị trùng bản cũ
             Current = null;

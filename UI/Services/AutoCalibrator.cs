@@ -25,7 +25,8 @@ namespace UI.Services
         char RzAxis,                             // trục xoay của robot ứng với góc Rz (thường 'C')
         double MaxErrorMm = 0,                   // sai số lớn nhất của một điểm lưới chấp nhận được (0 = không kiểm tra)
         double MaxRotationRmsMm = 0.3,           // sai số RMS của calib xoay (tìm mốc cách trục xoay); vượt thì không dùng kết quả xoay
-        double MaxAngleErrorDeg = 1.0);          // lệch góc tối đa giữa góc robot xoay và góc đo từ ảnh; vượt thì cảnh báo
+        double MaxAngleErrorDeg = 1.0,           // lệch góc tối đa giữa góc robot xoay và góc đo từ ảnh; vượt thì cảnh báo
+        int Averages = 1);                       // số lần chụp + đo tại mỗi điểm lưới, lấy trung bình (giảm nhiễu đo). 1 = một lần
 
     /// <summary>Kết quả calib xoay: vector từ TCP tới mốc (mm, hệ robot), sai số RMS của phép khớp và số mẫu dùng.</summary>
     public sealed record RotationFit(double OffsetX, double OffsetY, double RmsMm, int Samples);
@@ -74,6 +75,7 @@ namespace UI.Services
             if (plan.MinValidPoints > plan.CountX * plan.CountY)
                 return "Số điểm hợp lệ tối thiểu lớn hơn tổng số điểm lưới.";
             if (!double.IsFinite(plan.MaxRmsMm) || plan.MaxRmsMm <= 0) return "Sai số RMS tối đa phải lớn hơn 0.";
+            if (plan.Averages is < 1 or > 20) return "Số lần chụp trung bình mỗi điểm phải từ 1 đến 20.";
             if (!double.IsFinite(plan.MaxErrorMm) || plan.MaxErrorMm < 0) return "Sai số lớn nhất của một điểm không được âm (0 = không kiểm tra).";
             if (!double.IsFinite(plan.MaxRotationRmsMm) || plan.MaxRotationRmsMm <= 0) return "Sai số tối đa của calib xoay phải lớn hơn 0.";
             if (!double.IsFinite(plan.MaxAngleErrorDeg) || plan.MaxAngleErrorDeg <= 0) return "Lệch góc tối đa phải lớn hơn 0.";
@@ -133,7 +135,7 @@ namespace UI.Services
                     var arrived = await GoAndSettleAsync(robot, target, plan, ct);
                     if (arrived.Error != null) return Fail(arrived.Error, points, warnings);
 
-                    var pose = await measure(ct);
+                    var (pose, spreadPx) = await MeasureAveragedAsync(measure, plan.Averages, ct);
                     if (pose is not { } p || !p.IsFinite)
                     {
                         sample?.Invoke(new CaptureSample("Lưới", n + 1, arrived.Actual.X, arrived.Actual.Y, arrived.Actual.GetAxis(plan.RzAxis),
@@ -147,7 +149,8 @@ namespace UI.Services
                     var actual = arrived.Actual;
                     points.Add(new CalibrationPoint(p.Column, p.Row, actual.X, actual.Y));
                     sample?.Invoke(new CaptureSample("Lưới", n + 1, actual.X, actual.Y, actual.GetAxis(plan.RzAxis),
-                                                     p.Row, p.Column, p.AngleDeg));
+                                                     p.Row, p.Column, p.AngleDeg,
+                                                     plan.Averages > 1 ? $"TB {plan.Averages} lần, lệch chuẩn ảnh {spreadPx:F3} px" : ""));
                     progress.Report($"    pixel ({p.Column:F2}, {p.Row:F2}) ↔ robot ({actual.X:F3}, {actual.Y:F3})");
                 }
 
@@ -172,6 +175,8 @@ namespace UI.Services
 
                 progress.Report($"Ma trận: {points.Count} điểm, RMS {data.RmsMm:F3} mm, lớn nhất {data.MaxErrorMm:F3} mm, " +
                                 $"{affine.MillimetersPerPixel:F4} mm/pixel.");
+
+                ReportResiduals(points, affine, progress, sample, warnings);
 
                 // ---------- Pha 2: kiểm tra dấu góc ----------
                 if (plan.RotationsDeg.Count > 0)
@@ -238,6 +243,71 @@ namespace UI.Services
         // ============================================================
         // Kiểm tra dấu góc: xoay C quanh tâm, so góc đo từ ảnh với góc robot đã xoay
         // ============================================================
+
+        /// <summary>
+        /// Chụp + đo nhiều lần tại cùng một điểm rồi lấy trung bình (góc lấy trung bình vòng). Cần đo được ít nhất một nửa số lần,
+        /// không thì coi như không thấy. spreadPx: độ lệch chuẩn vị trí giữa các lần (pixel), cho biết độ ồn của phép đo.
+        /// </summary>
+        private static async Task<(Pose2D? Pose, double SpreadPx)> MeasureAveragedAsync(
+            Func<CancellationToken, Task<Pose2D?>> measure, int count, CancellationToken ct)
+        {
+            if (count <= 1) return (await measure(ct), 0);
+
+            var ok = new List<Pose2D>();
+            for (int i = 0; i < count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (await measure(ct) is { } p && p.IsFinite) ok.Add(p);
+            }
+            if (ok.Count == 0 || ok.Count * 2 < count) return (null, 0);
+
+            double row = ok.Average(p => p.Row), col = ok.Average(p => p.Column);
+            double sin = ok.Sum(p => Math.Sin(p.AngleDeg * Math.PI / 180.0));
+            double cos = ok.Sum(p => Math.Cos(p.AngleDeg * Math.PI / 180.0));
+            double angle = Pose2D.NormalizeAngle(Math.Atan2(sin, cos) * 180.0 / Math.PI);
+            double spread = Math.Sqrt(ok.Average(p => (p.Row - row) * (p.Row - row) + (p.Column - col) * (p.Column - col)));
+            return (new Pose2D(row, col, angle), spread);
+        }
+
+        /// <summary>
+        /// Báo sai số còn lại của từng điểm sau khi khớp (dx, dy theo mm), để biết lỗi nằm ở đâu:
+        ///  - sai số ngẫu nhiên đều khắp lưới: nhiễu đo (tăng số lần trung bình, ánh sáng, nét, mốc);
+        ///  - sai số tăng dần ra phía rìa ảnh: méo thấu kính, ma trận affine không đủ (cần calib camera bù méo trước);
+        ///  - sai số theo hướng robot đi (dương ở một nửa lưới, âm ở nửa kia): robot dừng chưa ổn định hoặc có độ rơ.
+        /// </summary>
+        private static void ReportResiduals(
+            IReadOnlyList<CalibrationPoint> points, Affine2D affine, IProgress<string> progress,
+            Action<CaptureSample>? sample, List<string> warnings)
+        {
+            double cx = points.Average(p => p.PixelX), cy = points.Average(p => p.PixelY);
+            var rows = new List<(double Radius, double Err)>();
+            for (int i = 0; i < points.Count; i++)
+            {
+                var p = points[i];
+                var (x, y) = affine.Apply(p.PixelX, p.PixelY);
+                double dx = x - p.RobotX, dy = y - p.RobotY;
+                double err = Math.Sqrt(dx * dx + dy * dy);
+                rows.Add((Math.Sqrt((p.PixelX - cx) * (p.PixelX - cx) + (p.PixelY - cy) * (p.PixelY - cy)), err));
+                sample?.Invoke(new CaptureSample("Sai số", i + 1, dx, dy, null, p.PixelY, p.PixelX, null,
+                                                 $"dx, dy = sai số còn lại (mm); |e| = {err:F3} mm"));
+            }
+
+            double mmPerPx = affine.MillimetersPerPixel;
+            double rms = Math.Sqrt(rows.Average(r => r.Err * r.Err));
+            progress.Report($"Sai số RMS {rms:F3} mm = {(mmPerPx > 0 ? rms / mmPerPx : 0):F2} pixel (1 pixel = {mmPerPx:F4} mm).");
+
+            if (rows.Count >= 6)
+            {
+                var sorted = rows.OrderBy(r => r.Radius).ToList();
+                int half = sorted.Count / 2;
+                double inner = Math.Sqrt(sorted.Take(half).Average(r => r.Err * r.Err));
+                double outer = Math.Sqrt(sorted.Skip(half).Average(r => r.Err * r.Err));
+                progress.Report($"Sai số trong ({half} điểm gần tâm ảnh): {inner:F3} mm; ngoài (rìa): {outer:F3} mm.");
+                if (outer > 0.15 && outer > inner * 1.8)
+                    warnings.Add($"Sai số tăng ra phía rìa ảnh (trong {inner:F3} mm, ngoài {outer:F3} mm): dấu hiệu méo thấu kính. " +
+                                 "Ma trận affine không bù được méo; cần calib camera bù méo, hoặc thu nhỏ vùng quét.");
+            }
+        }
 
         private static async Task<(List<string> Warnings, RotationFit? Fit)> CheckRotationAsync(
             IRobotDriver robot, Func<CancellationToken, Task<Pose2D?>> measure, AutoCalibrationPlan plan,

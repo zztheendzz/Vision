@@ -84,6 +84,8 @@ namespace Vision.Tools.Locate
                 new ParamDef("MinContrast", typeof(double), 0.0, Min: 0, Max: 255, Description: "Tương phản tối thiểu để một điểm ảnh được coi là viền khi tìm (0 = tự động). Đặt cao hơn nhiễu của ảnh. Đổi tham số này phải Học mẫu lại"),
                 new ParamDef("NumLevels",   typeof(int), 0, Min: 0, Max: 10, Description: "Số tầng kim tự tháp (0 = tự động). Vật nhỏ thì giảm; tìm chậm thì tăng"),
                 new ParamDef("Metric",      typeof(ShapeMetric), ShapeMetric.UsePolarity, Description: "Cách so cực tính sáng/tối: UsePolarity = vật phải cùng sáng/tối như mẫu, Ignore... = bỏ qua đảo cực tính"),
+                new ParamDef("OriginRow",    typeof(double), -1.0, Min: -1, Description: "Hàng (pixel, trên ảnh học) của điểm gốc mẫu = tâm thật của vật. -1 = để mặc định (trọng tâm vùng học = ROI trừ vùng xóa). Đặt cùng OriginColumn"),
+                new ParamDef("OriginColumn", typeof(double), -1.0, Min: -1, Description: "Cột (pixel, trên ảnh học) của điểm gốc mẫu. -1 = trọng tâm vùng học. Pose trả về chính là vị trí điểm gốc này"),
                 new ParamDef("PreviewOnly", typeof(bool), false, Description: "Chỉ xem trước mẫu khi Học mẫu: tạo mẫu và vẽ viền nhưng KHÔNG ghi file. Nút 'Xem mẫu' tự bật tham số này")
             })
             .ToArray();
@@ -170,6 +172,21 @@ namespace Vision.Tools.Locate
                 startRad, extentRad, "auto", "auto", metric, contrast,
                 minContrast > 0 ? new HTuple(minContrast) : new HTuple("auto"));
 
+            // Điểm gốc mẫu mặc định là TRỌNG TÂM vùng học. Người dùng có thể đặt lại về tâm thật của vật
+            double originRow = input.Get<double>("OriginRow"), originCol = input.Get<double>("OriginColumn");
+            string originNote = "";
+            if (originRow >= 0 && originCol >= 0)
+            {
+                roi.AreaCenter(out double centroidRow, out double centroidCol);
+                model.SetShapeModelOrigin(originRow - centroidRow, originCol - centroidCol);
+                originNote = $" Gốc mẫu đặt tại ({originRow:F1}, {originCol:F1}), trọng tâm vùng học ({centroidRow:F1}, {centroidCol:F1}).";
+            }
+            else if (originRow >= 0 || originCol >= 0)
+            {
+                model.Dispose();
+                return VisionToolResult.ConfigError("Phải đặt cả OriginRow và OriginColumn (hoặc cùng để -1).");
+            }
+
             Pose2D reference;
             double score;
             try
@@ -191,7 +208,8 @@ namespace Vision.Tools.Locate
                     using (var xld = model.GetShapeModelContours(1)) contours = xld.CountObj();
 
                     var preview = VisionToolResult.Ok(
-                            $"XEM TRƯỚC (chưa lưu): {contours} đường viền, tìm lại được với điểm {score:F2}. Ưng thì bấm Học mẫu để lưu.")
+                            $"XEM TRƯỚC (chưa lưu): {contours} đường viền, tìm lại được với điểm {score:F2}. Ưng thì bấm Học mẫu để lưu." +
+                            $" Gốc mẫu (điểm Pose trả về) ở hàng {reference.Row:F1}, cột {reference.Column:F1}.{originNote}")
                         .Add("Pose", reference)
                         .Add("Reference", reference)
                         .Add("Score", score);
