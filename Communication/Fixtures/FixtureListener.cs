@@ -67,6 +67,7 @@ namespace Communication.Fixtures
                     {
                         int n = await stream.ReadAsync(chunk, ct).ConfigureAwait(false);
                         if (n == 0) break;
+                        Communication.Transport.RawTrace.Emit("Cổng nhận " + remote, "RX", chunk.AsSpan(0, n));
                         buffer.AddRange(chunk.AsSpan(0, n).ToArray());
                         foreach (string line in TakeLines(buffer))
                             if (line.Length > 0) LineReceived?.Invoke(remote, line);

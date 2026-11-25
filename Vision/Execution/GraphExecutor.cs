@@ -7,6 +7,32 @@ using Vision.Services;
 namespace Vision.Execution
 {
 
+    public enum NodeStatus { Pending, Ok, Failed, Skipped }
+
+    public class NodeRun
+    {
+        public NodeStatus Status { get; set; } = NodeStatus.Pending;
+        public string Message { get; set; } = "";
+        public long ElapsedMs { get; set; }
+
+        /// <summary>true: node nằm ở nhánh của camera khác (theo FOV), bị bỏ qua có chủ ý, không phải lỗi.</summary>
+        public bool OffBranch { get; set; }
+        public VisionToolResult? Result { get; set; }
+    }
+
+    /// <summary>Kết quả một lượt chạy cả graph. Dispose = giải phóng toàn bộ kết quả các node.</summary>
+    public class GraphRunResult : IDisposable
+    {
+        public Dictionary<Guid, NodeRun> Nodes { get; } = new();
+        public NodeRun this[VisionNode node] => Nodes[node.Id];
+
+        public void Dispose()
+        {
+            foreach (var r in Nodes.Values) r.Result?.Dispose();
+            Nodes.Clear();
+        }
+    }
+
     public class GraphExecutor
     {
         private readonly IVisionLogger _logger;
@@ -28,10 +54,12 @@ namespace Vision.Execution
             var order = graph.GetTopologicalOrder();
 
             // Một ToolContext chung cho cả lượt: Mode / NeedDisplay lấy từ RunOptions
-            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay, options.Fov);
+            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay, options.Fov, options.ModelPath, options.CalibrationPath);
 
             // Chụp tham số hiệu lực ngay đầu lượt: UI sửa node giữa chừng không ảnh hưởng lượt đang chạy
             var effective = BuildEffectiveParameters(graph, options);
+
+            var offBranch = ComputeOffBranch(order, effective, options);
 
             var run = new GraphRunResult();
             try
@@ -42,6 +70,15 @@ namespace Vision.Execution
 
                     var nr = new NodeRun();
                     run.Nodes[node.Id] = nr;
+
+                    if (offBranch.Contains(node.Id))
+                    {
+                        nr.Status = NodeStatus.Skipped;
+                        nr.OffBranch = true;
+                        nr.Message = $"Nhánh của camera khác (FOV {options.Fov} dùng camera '{options.ActiveCamera}')";
+                        NodeFinished?.Invoke(node, nr);
+                        continue;
+                    }
 
                     // Seed < tham số (đã gộp ghi đè) < dây nối
                     var input = new VisionToolInput();
@@ -102,6 +139,40 @@ namespace Vision.Execution
                 throw;
             }
             return run;
+        }
+
+        /// <summary>
+        /// Các node nằm ở nhánh của camera KHÁC camera đang dùng (theo FOV). Node thuộc nhánh khi có node Camera Image ở phía trước
+        /// (kể cả chính nó); nhánh bị bỏ qua khi không camera nào trong số đó là camera đang dùng. Node không có Camera Image phía trước thì luôn chạy.
+        /// Camera Image để trống tham số Camera = camera đầu tiên.
+        /// </summary>
+        private static HashSet<Guid> ComputeOffBranch(
+            IReadOnlyList<VisionNode> order, Dictionary<Guid, Dictionary<string, object?>> effective, RunOptions options)
+        {
+            var off = new HashSet<Guid>();
+            if (string.IsNullOrWhiteSpace(options.ActiveCamera)) return off;
+
+            string active = options.ActiveCamera!.Trim();
+            var cameras = new Dictionary<Guid, HashSet<string>>();
+            foreach (var node in order)
+            {
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var port in node.Inputs)
+                    if (port.Connection is { } c && cameras.TryGetValue(c.From.Owner.Id, out var up))
+                        set.UnionWith(up);
+
+                if (node.ToolName == "CameraImage")
+                {
+                    effective[node.Id].TryGetValue("Camera", out var cam);
+                    string name = (cam as string ?? "").Trim();
+                    if (name.Length == 0) name = options.FirstCamera?.Trim() ?? "";
+                    set.Add(name);
+                }
+
+                cameras[node.Id] = set;
+                if (set.Count > 0 && !set.Contains(active)) off.Add(node.Id);
+            }
+            return off;
         }
 
         private static Dictionary<Guid, Dictionary<string, object?>> BuildEffectiveParameters(

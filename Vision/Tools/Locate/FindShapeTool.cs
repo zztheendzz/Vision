@@ -55,7 +55,7 @@ namespace Vision.Tools.Locate
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]
         {
             new PortDef("Image",  typeof(HImage)),
-            // Tùy chọn: nối Region (ví dụ từ SelectByRoi / Blob) thì chỉ học và chỉ tìm trong vùng đó; không nối thì học bằng ROI của tool, tìm toàn ảnh
+            // Tùy chọn: nối Region (ví dụ từ SelectByRoi / Blob) thì CHỈ TÌM trong vùng đó. Học mẫu và Xem mẫu luôn dùng ROI của chính FindShape; không nối Region thì tìm toàn ảnh
             new PortDef("Region", typeof(HRegion), Required: false)
         };
 
@@ -114,7 +114,7 @@ namespace Vision.Tools.Locate
             string template = input.Get<string>("ModelPath");
             if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt ModelPath");
-            if (!context.TryResolvePath(template, out string path, out string? pathError))
+            if (!context.TryResolveModelPath(template, out string path, out string? pathError))
                 return VisionToolResult.ConfigError(pathError!);
 
             var image = input.Get<HImage>("Image");                   // chỉ mượn
@@ -141,7 +141,7 @@ namespace Vision.Tools.Locate
             VisionToolInput input, HImage image, HRegion? region, string path,
             double startRad, double extentRad, double greediness, ToolContext context)
         {
-            using var roi = ShapeEraseAreas.BuildTrainRegion(input, region);   // ROI trừ các vùng xóa viền
+            using var roi = ShapeEraseAreas.BuildTrainRegion(input);           // ROI CỦA FINDSHAPE (kéo trên ảnh) trừ các vùng xóa viền; Region nối vào không dùng để học
             using var reduced = image.ReduceDomain(roi);
 
             // ROI mặc định (hàng 240, cột 320) có thể không nằm trên vật của bạn: báo rõ thay vì để Halcon báo lỗi khó hiểu

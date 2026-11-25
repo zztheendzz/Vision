@@ -26,9 +26,8 @@ namespace UI.Services
     ///  - Không thấy vật (node chạy tốt nhưng không có kết quả) hoặc node PlaceCompensation không ra độ bù: gửi NG.
     ///  - Còn lại: gửi độ bù (dX, dY, dRz) của PlaceCompensation.
     ///  - Robot chưa nối: không gửi, báo rõ để không tưởng đã gửi.
-    /// Hai cách gửi (chọn ở cấu hình robot, ô "Cách gửi cho robot"):
-    ///  - Độ lệch: ghi (dX, dY, dRz) vào biến điểm trung gian, chương trình robot tự cộng vào điểm.
-    ///  - Ghi đè điểm: đọc điểm đã chọn, tự cộng độ bù theo quy ước của node, ghi đè lại đúng điểm đó.
+    /// Các cách gửi (chọn ở cấu hình robot, ô "Cách gửi cho robot"): độ lệch (điểm trung gian), gói tin TCP, hoặc qua PLC.
+    /// Chương trình robot tự cộng độ bù vào điểm; app không ghi đè điểm trong robot.
     /// Giới hạn độ lệch tối đa do driver của hãng kiểm tra thêm một lớp nữa trước khi ra mạng.
     /// </summary>
     public sealed class OffsetDispatcher
@@ -92,11 +91,7 @@ namespace UI.Services
                 var settings = robot.PointSettings;
                 var convention = ReadConvention(placeNode);
 
-                // Chế độ 2: tính ra điểm mới rồi ghi đè lên điểm đã chọn
-                if (settings.Mode == RobotSendMode.OverwritePoint)
-                    return await OverwriteAsync(robot, robotCfg.Name, settings, offset, convention, note, cancellationToken);
-
-                // Chế độ 1 (điểm trung gian) và chế độ gói tin: gửi độ lệch, robot tự cộng
+                // Điểm trung gian và gói tin: gửi độ lệch, robot tự cộng
                 var reply = await robot.SendOffsetAsync(offset.Dx, offset.Dy, offset.Drz, (int)id, cancellationToken);
                 string convNote = convention == PlaceOffsetConvention.Additive
                     ? ""
@@ -233,33 +228,6 @@ namespace UI.Services
             if (!node.Parameters.TryGetValue("Convention", out var value)) return PlaceOffsetConvention.Additive;
             if (value is PlaceOffsetConvention c) return c;
             return Enum.TryParse(value?.ToString(), true, out PlaceOffsetConvention parsed) ? parsed : PlaceOffsetConvention.Additive;
-        }
-
-        /// <summary>Đọc điểm đã chọn từ robot, áp độ bù, kiểm tra giới hạn rồi ghi đè lại đúng điểm đó.</summary>
-        private static async Task<DispatchResult> OverwriteAsync(
-            IRobotDriver robot, string robotName, RobotPointSettings settings, RobotOffset offset,
-            PlaceOffsetConvention convention, string note, CancellationToken ct)
-        {
-            string point = settings.TargetPoint;
-            if (!RobotPoint.IsValidName(point))
-                return new DispatchResult(false, false, $"Chưa chọn điểm cần bù cho {robotName} (ô 'Điểm cần bù'): KHÔNG ghi gì.");
-
-            string? invalid = robot.ValidateOffset(offset.Dx, offset.Dy, offset.Drz);
-            if (invalid != null)
-                return new DispatchResult(false, false, $"{invalid} (KHÔNG ghi điểm {point})");
-
-            var read = await robot.ReadPointAsync(point, ct);
-            if (!read.Ok)
-                return new DispatchResult(false, false, $"Không đọc được điểm {point} từ {robotName}: {read.Error}. KHÔNG ghi gì.");
-
-            var original = read.Point;
-            var moved = Apply(original, offset, convention, settings.RzAxis);
-
-            var reply = await robot.WritePointAsync(point, moved, ct);
-            return reply.Accepted
-                ? new DispatchResult(true, true,
-                    $"Đã ghi đè {point} của {robotName}: {original.ToMelfa()} → {moved.ToMelfa()} (bù {offset}){note}")
-                : new DispatchResult(true, false, $"Ghi đè {point} của {robotName} thất bại: {reply.Error}{note}");
         }
 
         /// <summary>Điểm mới = điểm cũ áp độ bù theo quy ước của node PlaceCompensation; Z, trục xoay còn lại và cờ giữ nguyên.</summary>

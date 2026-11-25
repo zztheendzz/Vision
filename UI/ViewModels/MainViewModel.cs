@@ -32,6 +32,8 @@ namespace UI.ViewModels
         public PropertyPanelViewModel Properties { get; }
 
         /// <summary>Chạy thử đồ thị, hiển thị ảnh và kết quả.</summary>
+        public Communication.Fov.FovTable FovTable { get; } = new();
+
         public RunViewModel Run { get; }
 
         /// <summary>Vẽ/chỉnh ROI của node đang chọn ngay trên ảnh.</summary>
@@ -58,7 +60,8 @@ namespace UI.ViewModels
             Editor = new GraphEditorViewModel(BuildDemoGraph(), dialogs);
             Toolbox = new ToolboxViewModel();
             Properties = new PropertyPanelViewModel();
-            Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager, () => PlcMap?.Map), Devices.Manager);
+            FovTable.Load();
+            Run = new RunViewModel(Editor, dialogs, new OffsetDispatcher(Devices.Manager, () => PlcMap?.Map), Devices.Manager) { FixtureRoot = Devices, FovTable = FovTable };
             Roi = new RoiEditorViewModel(Editor, Properties);
             AutoCal = new AutoCalibrationViewModel(Devices.Manager, Run, dialogs, () => PlcMap?.Map);
             PlcMap = new PlcMapViewModel(Devices.Manager, dialogs);
@@ -219,6 +222,7 @@ namespace UI.ViewModels
         private static VisionGraph BuildDemoGraph()
         {
             var g = new VisionGraph();
+
 
             return g;
         }

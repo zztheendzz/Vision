@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Text;
 using UI.Models;
 using UI.Services;
+using UI.ViewModels.Device;
 using UI.ViewModels.Graph;
 using UI.ViewModels.RunAndDisplay;
 using Vision.Core;
@@ -18,6 +19,7 @@ using Vision.Geometry;
 using Vision.Graph;
 using Vision.Runtime;
 using Vision.Services;
+using Vision.Tools.Bases;
 
 namespace UI.ViewModels.RunAndDisplay
 {
@@ -65,6 +67,13 @@ namespace UI.ViewModels.RunAndDisplay
         public string AutoButtonText => IsAuto ? "\u25A0 Dừng tự động" : "\u25B6 Tự động (PLC)";
 
         private PlcAutoRunner? _auto;
+        private FixtureHandshakeRunner? _fixtureHs;
+
+        /// <summary>Cấu hình khuôn test; đặt thì chạy tự động còn chạy thêm bắt tay robot–khuôn (bit M739 / M740).</summary>
+        public DeviceConfigViewModel? FixtureRoot { get; set; }
+
+        /// <summary>Bảng FOV: mỗi số FOV gắn với camera, nhánh chạy, file mẫu, file hiệu chuẩn. Bảng trống thì chạy như cũ (mọi camera, mọi nhánh).</summary>
+        public Communication.Fov.FovTable? FovTable { get; set; }
 
         /// <summary>Lưu ảnh và kết quả của mỗi lần "Chạy từ camera" vào ổ đĩa.</summary>
         [ObservableProperty] private bool _saveResults = true;
@@ -193,9 +202,19 @@ namespace UI.ViewModels.RunAndDisplay
         }
 
         /// <summary>Chụp một khung mới từ MỖI camera đang kết nối. Khóa là tên thiết bị; người gọi sở hữu các ảnh.</summary>
-        private async Task<Dictionary<string, HImage>> GrabFromCamerasAsync(CancellationToken ct)
+        private Task<Dictionary<string, HImage>> GrabFromCamerasAsync(CancellationToken ct) => GrabCamerasAsync(ct, null);
+
+        /// <summary>Chụp song song các camera đang nối; onlyCamera có tên thì chỉ chụp camera đó (theo FOV).</summary>
+        private async Task<Dictionary<string, HImage>> GrabCamerasAsync(CancellationToken ct, string? onlyCamera)
         {
             var cameras = _devices.ConnectedCameras();
+            if (!string.IsNullOrWhiteSpace(onlyCamera))
+            {
+                // Theo FOV: chỉ chụp đúng camera được gán
+                cameras = cameras.Where(c => string.Equals(c.Config.Name, onlyCamera.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                if (cameras.Count == 0)
+                    throw new InvalidOperationException($"Camera '{onlyCamera}' (theo bảng FOV) chưa kết nối hoặc không đúng tên thiết bị.");
+            }
             if (cameras.Count == 0)
                 throw new InvalidOperationException(
                     "Chưa có camera nào được kết nối. Mở Cấu hình kết nối, tab Camera, tick Bật rồi bấm Kết nối.");
@@ -251,6 +270,34 @@ namespace UI.ViewModels.RunAndDisplay
             StatusText = "Đang chạy...";
 
             var options = new RunOptions { Mode = mode, NeedDisplay = true, Fov = fov ?? Fov };
+
+            // Bảng FOV: số FOV quyết định camera chụp, nhánh chạy, file mẫu và file hiệu chuẩn
+            if (FovTable is { Entries.Count: > 0 } table && options.Fov >= 0)
+            {
+                var entry = table.Find(options.Fov);
+                if (entry == null || !entry.Enabled)
+                {
+                    string why = entry == null
+                        ? $"FOV {options.Fov} chưa có trong bảng FOV"
+                        : $"FOV {options.Fov} đang bị tắt trong bảng FOV";
+                    StatusText = why;
+                    AppendLog("[FOV - LỖI] " + why);
+                    if (interactive) _dialogs.ShowError(why + ". Mở Công cụ > Bảng FOV để khai báo.");
+                    IsRunning = false;
+                    _editor.IsLocked = IsAuto;
+                    return interactive ? null : RunVerdict.Error;
+                }
+
+                options.ActiveCamera = entry.Camera;
+                options.FirstCamera = _devices.CameraNames.FirstOrDefault();
+                options.ModelPath = entry.ModelPath;
+                options.CalibrationPath = entry.CalibrationPath;
+                if (imageSource != null)
+                    imageSource = c => GrabCamerasAsync(c, entry.Camera);
+                AppendLog($"[FOV {entry.Fov}] camera '{entry.Camera}'" +
+                          (entry.ModelPath.Length > 0 ? $", mẫu {entry.ModelPath}" : "") +
+                          (entry.CalibrationPath.Length > 0 ? $", hiệu chuẩn {entry.CalibrationPath}" : ""));
+            }
             if (previewOnly)
             {
                 // Chỉ xem trước: các node FindShape tạo mẫu và vẽ viền nhưng không ghi file (chỉ cho lượt này)
@@ -292,7 +339,7 @@ namespace UI.ViewModels.RunAndDisplay
                 _lastRun = run;
                 sw.Stop();
 
-                int bad = run.Nodes.Values.Count(n => n.Status != NodeStatus.Ok);
+                int bad = run.Nodes.Values.Count(n => n.Status != NodeStatus.Ok && !n.OffBranch);
                 StatusText = bad == 0
                     ? $"Xong: {run.Nodes.Count} node, {sw.ElapsedMilliseconds} ms"
                     : $"Xong: {bad}/{run.Nodes.Count} node không thành công ({sw.ElapsedMilliseconds} ms)";
@@ -470,15 +517,40 @@ namespace UI.ViewModels.RunAndDisplay
                 return;
             }
 
+            if (FixtureRoot != null)
+            {
+                _fixtureHs ??= CreateFixtureHandshake(FixtureRoot);
+                string? hsError = _fixtureHs.Start();
+                if (hsError != null)
+                {
+                    _auto.Stop();
+                    _dialogs.ShowError("Bắt tay robot–khuôn: " + hsError);
+                    return;
+                }
+            }
+
             IsAuto = true;
             _editor.IsLocked = true;
             StatusText = $"Tự động ({ModeName(Mode)}): đang chờ tín hiệu PLC";
             AppendLog($"--- Bật chạy tự động {DateTime.Now:HH:mm:ss} ({ModeName(Mode)}) ---");
         }
 
+        private FixtureHandshakeRunner CreateFixtureHandshake(DeviceConfigViewModel root)
+        {
+            var hs = new FixtureHandshakeRunner(root, PostLog);
+            hs.Stopped += reason => _ui.Post(_ =>
+            {
+                if (!IsAuto) return;
+                StopAuto("Tự động DỪNG (khuôn test): " + reason);
+                _dialogs.ShowError("Bắt tay robot–khuôn đã dừng:\n" + reason);
+            }, null);
+            return hs;
+        }
+
         private void StopAuto(string message)
         {
             _auto?.Stop();
+            _fixtureHs?.Stop();
             _cts?.Cancel();                       // đang giữa một lượt thì dừng lượt đó
             IsAuto = false;
             if (!IsRunning) _editor.IsLocked = false;
@@ -514,6 +586,8 @@ namespace UI.ViewModels.RunAndDisplay
             foreach (var node in graph.Nodes)
             {
                 ct.ThrowIfCancellationRequested();
+                // Tool đã nạp rồi thì giữ nguyên (mẫu shape, hiệu chuẩn): Initialize sẽ Release trước nên gọi lại mỗi chu kỳ là bỏ cache và đọc lại file
+                if (node.Tool is StatefulToolBase { IsInitialized: true }) continue;
                 try { node.Tool.Initialize(context); }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -617,6 +691,7 @@ namespace UI.ViewModels.RunAndDisplay
         public void Dispose()
         {
             _auto?.Dispose();
+            _fixtureHs?.Dispose();
             _cts?.Cancel();
             ClearDisplay();
         }

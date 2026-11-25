@@ -16,8 +16,7 @@ namespace Communication.Mitsubishi
             string offsetPoint = d.GetString("OffsetPoint").Trim();
             string axis = d.GetString("RzAxis").Trim().ToUpperInvariant();
 
-            RobotSendMode sendMode = mode == DeviceSchemas.RobotSendOverwrite ? RobotSendMode.OverwritePoint
-                                   : mode == DeviceSchemas.RobotSendPacket ? RobotSendMode.Packet
+            RobotSendMode sendMode = mode == DeviceSchemas.RobotSendPacket ? RobotSendMode.Packet
                                    : mode == DeviceSchemas.RobotSendViaPlc ? RobotSendMode.ViaPlc
                                    : RobotSendMode.OffsetViaPoint;
 

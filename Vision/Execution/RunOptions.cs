@@ -26,6 +26,19 @@ namespace Vision.Execution
         /// <summary>Vị trí chụp (FOV) của lượt này. Âm = không dùng. Xem ToolContext.Fov.</summary>
         public int Fov { get; set; } = -1;
 
+        /// <summary>
+        /// Camera của FOV này. Có giá trị: chỉ chạy các node thuộc nhánh của camera đó (nhánh bắt đầu từ node Camera Image của camera khác bị bỏ qua).
+        /// Null = chạy tất cả như bình thường.
+        /// </summary>
+        public string? ActiveCamera { get; set; }
+
+        /// <summary>Tên camera đầu tiên: node Camera Image để trống tham số Camera lấy camera này.</summary>
+        public string? FirstCamera { get; set; }
+
+        /// <summary>File mẫu / file hiệu chuẩn của FOV này (từ bảng FOV). Có giá trị thì thay cho đường dẫn đặt trong node.</summary>
+        public string? ModelPath { get; set; }
+        public string? CalibrationPath { get; set; }
+
         public VisionToolInput Seed { get; } = new();
 
         public RunOptions SetSeed<T>(string key, T value)

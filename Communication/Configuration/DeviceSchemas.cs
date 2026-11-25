@@ -48,7 +48,7 @@ namespace Communication.Configuration
 
         /// <summary>Robot: gửi độ lệch (dX, dY, dRz) vào biến điểm trung gian; chương trình robot tự cộng vào điểm.</summary>
         public const string RobotSendOffset = "Gửi độ lệch (điểm trung gian)";
-        /// <summary>Robot: app tính điểm mới rồi ghi đè lên điểm đã chọn.</summary>
+        /// <summary>Đã bỏ chế độ ghi đè điểm. Giữ hằng số để file cấu hình cũ còn giá trị này được chuyển về RobotSendOffset (DeviceCatalog.Repair).</summary>
         public const string RobotSendOverwrite = "Ghi đè điểm đã tính";
         /// <summary>Robot: gửi gói tin chữ (mẫu tùy chọn) chứa độ lệch qua TCP tới chương trình robot.</summary>
         public const string RobotSendPacket = "Gửi gói tin độ lệch (TCP)";
@@ -64,6 +64,9 @@ namespace Communication.Configuration
         /// <summary>Chế độ Qua PLC: gửi cả hai, mỗi loại vào nhóm thanh ghi riêng.</summary>
         public const string PlcSourceBoth = "Cả hai (đặt và gắp)";
 
+        public const string ScanTcp = "Quét dải IP (TCP)";
+        public const string ScanUdp = "Broadcast (UDP)";
+
         private static FieldDef Txt(string key, string label, string def = "", string section = "", string hint = "")
             => new(key, label, FieldKind.Text, def, section, Hint: hint);
         /// <summary>Ô chung cho mọi loại thiết bị: sau bao lâu tự nối lại khi mất kết nối (0 = không tự nối).</summary>
@@ -75,6 +78,10 @@ namespace Communication.Configuration
         private static FieldDef Int(string key, string label, int def, double min, double max, string section = "", string hint = "")
             => new(key, label, FieldKind.Integer, def.ToString(), section, Min: min, Max: max, Hint: hint);
         /// <summary>Các lệnh gửi khuôn test: khóa, tên hiển thị, mẫu gửi, mẫu trả lời 1 (OK/YES/OPENED), mẫu trả lời 2 (ERROR/NO/CLOSED).</summary>
+        public const string OpenModeStacked = "Khuôn chồng: mở trên HOẶC dưới";
+        public const string OpenModeSides = "2 bên A/B: mỗi bên chỉ 1 khuôn mở";
+        public const string OpenModeSingle = "Toàn hệ thống chỉ 1 khuôn mở";
+
         public static readonly (string Key, string Title, string Send, string Ok, string Err)[] FixtureCommands =
         {
             ("Open",        "OPEN – mở khuôn",           "OPEN_{SS}",        "OPEN_{SS}_OK",  "OPEN_{SS}_ERROR"),
@@ -245,11 +252,11 @@ namespace Communication.Configuration
                         "Bật quyền điều khiển, dừng chương trình đang chạy và reset. Cần để đọc/ghi điểm của chương trình")),
                     WhenMitsubishi(Bool("EnableOnConnect", "Bật servo khi kết nối", false, "Điều khiển",
                         "Tắt là an toàn: chương trình không tự bật servo robot. Bật ô này cũng chiếm quyền điều khiển")),
-                    Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendOverwrite, RobotSendPacket, RobotSendViaPlc }, "Độ bù"),
+                    Choice("SendMode", "Cách gửi cho robot", RobotSendOffset, new[] { RobotSendOffset, RobotSendPacket, RobotSendViaPlc }, "Độ bù"),
                     WhenSend(RobotSendViaPlc, Choice("PlcSource", "Gửi độ bù của tool nào", PlcSourcePlace,
                         new[] { PlcSourceNone, PlcSourcePlace, PlcSourcePick, PlcSourceBoth }, "Độ bù")),
                     Txt("TargetPoint", "Điểm cần bù", "P1", "Độ bù",
-                        "Chọn từ danh sách đọc ở nút 'Đọc danh sách điểm'. Dùng cho chế độ ghi đè điểm"),
+                        "Điểm đang chọn khi đọc / dạy điểm trong màn hình điều khiển robot (đọc danh sách ở nút 'Đọc danh sách điểm')"),
                     Txt("PointProgram", "Chương trình chứa điểm", "", "Độ bù",
                         "Tên chương trình robot có các điểm P1, P2... (đọc/ghi điểm qua chương trình này; không được đang chạy)"),
                     WhenSend(RobotSendOffset, Txt("OffsetPoint", "Biến điểm trung gian (toàn cục)", "P_VOFS", "Độ bù",
@@ -291,8 +298,27 @@ namespace Communication.Configuration
                     Term(KeyTx, "Ký tự kết thúc TX"),
                     Term(KeyRx, "Ký tự kết thúc RX"),
                     Int("ListenPort", "Cổng nhận", 5002, 1, 65535, "Chung"),
+                    Txt("Scan.Command", "Quét khuôn – lệnh gửi", "ASK", "Quét khuôn",
+                        "Lệnh gửi tới tất cả địa chỉ để hỏi khuôn. Mặc định ASK, đổi được theo khuôn của bạn."),
+                    Int("Scan.Port", "Quét khuôn – cổng", 9999, 1, 65535, "Quét khuôn", "Cổng của khuôn để hỏi. Mặc định 9999."),
+                    Choice("Scan.Method", "Quét khuôn – cách gửi", ScanTcp, new[] { ScanTcp, ScanUdp }, "Quét khuôn"),
+                    Txt("Scan.Range", "Quét khuôn – dải IP", "", "Quét khuôn",
+                        "Ví dụ 10.153.66.1-254 hoặc 10.153.66.0/24. Để trống = dải /24 của card mạng đang chạy. (Chỉ dùng khi quét theo TCP)"),
+                    Int("Scan.TimeoutMs", "Quét khuôn – chờ trả lời (ms)", 800, 100, 10000, "Quét khuôn"),
+                    Txt("Scan.Pattern", "Quét khuôn – mẫu trả lời", "{STATE}_{SS}_{NN}", "Quét khuôn",
+                        "Một dòng trả lời: {STATE} = P/F/R (PASS/FAIL/REPAIR; còn B, I, E), {SS} = số khuôn (01, 02...), {NN} = số slot. Ví dụ P_01_2 = khuôn 1, slot 2 PASS."),
                     Bool("Interlock", "Khóa an toàn khi chạy tự động", true, "Chung",
                          "Chỉ áp dụng khi chạy tự động, bấm tay không bị chặn. Đóng chỉ khi có hàng; mở chỉ khi FAIL/REPAIR; khuôn nằm trên không mở khi khuôn dưới đang mở. Tắt khi chỉ mô phỏng."),
+                    Choice("OpenMode", "Chế độ đóng/mở khuôn", OpenModeStacked,
+                           new[] { OpenModeStacked, OpenModeSides, OpenModeSingle }, "Chế độ đóng/mở"),
+                    Addr("Hs.PickedBit", "Bit robot gắp xong (→ mở khuôn)", "M739", "Bắt tay robot"),
+                    Addr("Hs.PlacedBit", "Bit robot đặt xong (→ đóng khuôn)", "M740", "Bắt tay robot"),
+                    Addr("Hs.FixtureReg", "Thanh ghi số khuôn đích (SS)", "D642", "Bắt tay robot"),
+                    Int("Hs.OpenDelayMs", "Trễ trước khi MỞ (ms)", 0, 0, 600000, "Bắt tay robot",
+                        "Từ lúc thấy bit 'robot gắp xong' = 1 đến lúc gửi lệnh mở."),
+                    Int("Hs.CloseDelayMs", "Trễ trước khi ĐÓNG (ms)", 0, 0, 600000, "Bắt tay robot",
+                        "Từ lúc thấy bit 'robot đặt xong' = 1 đến lúc gửi lệnh đóng."),
+                    Int("Hs.PollMs", "Chu kỳ đọc bit (ms)", 50, 10, 1000, "Bắt tay robot"),
                 }.Concat(FixtureProtocolFields()).ToArray(),
                 DeviceFields = new[]
                 {
@@ -304,6 +330,9 @@ namespace Communication.Configuration
                     Int("Slots", "Số slot", 1, 1, 64, "Kết nối"),
                     Int("BelowNo", "Khuôn nằm ngay dưới (SS)", 0, 0, 99, "Kết nối",
                         "Số khuôn nằm ngay bên dưới khuôn này, 0 = không có. Khuôn dưới đang mở thì khuôn này bị cấm mở (tránh va chạm robot)."),
+                    Choice("Side", "Bên (A / B)", "A", new[] { "A", "B" }, "Kết nối"),
+                    Bool("HasSensor", "Có cảm biến hàng", true, "Kết nối",
+                         "Có: gửi CHECKSENSOR để biết có hàng. Không: dựa vào bit 'robot đặt xong' (mặc định M740)."),
                     Int("TestTimeoutS", "Timeout test (giây)", 100, 1, 36000, "Thời gian"),
                     Int("CloseToOpenMs", "Nghỉ Đóng→Mở (ms)", 2000, 0, 600000, "Thời gian"),
                     new FieldDef("HasSampleBit", "Bit có bản (mỗi slot một)", FieldKind.Address, "M1001", "Bit / thanh ghi PLC",

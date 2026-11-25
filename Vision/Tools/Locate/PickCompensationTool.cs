@@ -69,6 +69,7 @@ namespace Vision.Tools.Locate
         {
             new ParamDef("CalibrationPath", typeof(string), "calibration.json", Description: "File hiệu chuẩn camera - robot"),
             new ParamDef("Convention", typeof(OffsetConvention), OffsetConvention.AboutRobotOrigin, Description: "Cách robot áp độ bù. Additive = PLC/robot cộng thẳng vào điểm dạy (phải nhập TaughtX/Y/Rz)"),
+            new ParamDef("InvertRz", typeof(bool), false, Description: "Đảo dấu góc Rz gửi cho robot. Bật khi calib báo \"Dấu góc có vẻ NGƯỢC\" (robot xoay +, ảnh đo -): trục xoay của robot ngược chiều với hệ tọa độ X-Y đã calib"),
             new ParamDef("MaxShiftMm",  typeof(double), 100.0, Min: 0, Description: "Vật lệch quá số mm này so với mẫu thì từ chối"),
             new ParamDef("MaxAngleDeg", typeof(double), 180.0, Min: 0, Max: 180, Description: "Vật xoay quá số độ này so với mẫu thì từ chối"),
             new ParamDef("HasTaughtPick", typeof(bool), false, Description: "Bật để tính thêm điểm gắp tuyệt đối từ điểm đã dạy"),
@@ -85,7 +86,7 @@ namespace Vision.Tools.Locate
             string template = input.Get<string>("CalibrationPath");
             if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt CalibrationPath");
-            if (!context.TryResolvePath(template, out string path, out string? pathError))
+            if (!context.TryResolveCalibrationPath(template, out string path, out string? pathError))
                 return VisionToolResult.ConfigError(pathError!);
 
             var now = input.Get<Pose2D>("Pose");
@@ -110,6 +111,9 @@ namespace Vision.Tools.Locate
             if (Math.Abs(dTheta) > input.Get<double>("MaxAngleDeg"))
                 return VisionToolResult.NoResult($"Vật xoay {dTheta:F1}° so với mẫu, vượt giới hạn {input.Get<double>("MaxAngleDeg"):F1}°");
 
+            // Góc gửi cho robot: đảo dấu nếu trục xoay của robot ngược chiều (hình học X-Y bên dưới vẫn dùng dTheta thật)
+            double sendTheta = input.Get<bool>("InvertRz") ? -dTheta : dTheta;
+
             double rad = dTheta * Math.PI / 180.0;
             double cos = Math.Cos(rad), sin = Math.Sin(rad);
 
@@ -123,13 +127,13 @@ namespace Vision.Tools.Locate
 
             RobotOffset offset = convention switch
             {
-                OffsetConvention.AboutRobotOrigin => new RobotOffset(tx, ty, dTheta),
+                OffsetConvention.AboutRobotOrigin => new RobotOffset(tx, ty, sendTheta),
                 // Cộng thẳng: điểm gắp mới trừ điểm đã dạy (xoay điểm dạy quanh tâm mẫu rồi dịch theo vật)
                 OffsetConvention.Additive => new RobotOffset(
                     cos * taughtX - sin * taughtY + tx - taughtX,
                     sin * taughtX + cos * taughtY + ty - taughtY,
-                    dTheta),
-                _ => new RobotOffset(nowX - refX, nowY - refY, dTheta)
+                    sendTheta),
+                _ => new RobotOffset(nowX - refX, nowY - refY, sendTheta)
             };
 
             var result = VisionToolResult.Ok($"Bù {offset}").Add("Offset", offset);
@@ -146,7 +150,7 @@ namespace Vision.Tools.Locate
                 var pick = new RobotPose(
                     cos * px - sin * py + tx,
                     sin * px + cos * py + ty,
-                    Pose2D.NormalizeAngle(input.Get<double>("TaughtRz") + dTheta));
+                    Pose2D.NormalizeAngle(input.Get<double>("TaughtRz") + sendTheta));
 
                 result.Add("Pick", pick);
                 result.Values["PickX"] = Fmt(pick.X);

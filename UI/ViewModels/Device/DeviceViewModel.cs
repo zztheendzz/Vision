@@ -828,6 +828,7 @@ namespace UI.ViewModels.Device
         {
             OpenFaulted = false;
             IsOpen = open;
+            if (open) RobotPlaced = false;       // vừa mở: chờ robot đặt hàng mới
             FixtureStateText = open ? "Đang mở" : "Đang đóng";
         }
         [ObservableProperty] private string _sensorText = "Chưa kiểm";
@@ -977,7 +978,8 @@ namespace UI.ViewModels.Device
             int ss = FixtureNo;
             string text = protocol.BuildCommand(command, ss);
             Message = $"Gửi: {text}";
-            Log("GỬI", text);
+            var tcp = transport as TcpTransport;
+            Log("GỬI", text + (tcp != null ? RawTrace.Visible(tcp.TxTerminator) : ""));      // hiện rõ ký tự kết thúc: ASK<CR><LF>
 
             // Khuôn có thể trả lời trên chính kết nối lệnh, hoặc gửi về "Cổng nhận" (TCP Split): cái nào đến trước thì dùng
             _pendingCommand = command;
@@ -992,7 +994,7 @@ namespace UI.ViewModels.Device
                 }
 
                 string reply = await request;
-                Log("NHẬN", reply);
+                Log("NHẬN", reply + (tcp != null ? RawTrace.Visible(tcp.RxTerminator) : ""));
                 ApplyFixtureReply(command, reply, ss, protocol);
             }
             finally
@@ -1042,6 +1044,25 @@ namespace UI.ViewModels.Device
         /// <summary>Số khuôn nằm ngay dưới khuôn này (0 = không có).</summary>
         public int BelowNo => Config.GetInt("BelowNo", 0);
 
+        /// <summary>Chế độ đóng/mở đang chọn (1 trong 3, chung cho mọi khuôn).</summary>
+        public string OpenMode
+        {
+            get
+            {
+                string m = _catalog.GetGroupValueOrDefault(DeviceType.Fixture, "OpenMode");
+                return m == DeviceSchemas.OpenModeSides || m == DeviceSchemas.OpenModeSingle ? m : DeviceSchemas.OpenModeStacked;
+            }
+        }
+
+        /// <summary>Bên A hoặc B của khuôn này (chế độ 2 bên).</summary>
+        public string Side => Config.GetString("Side").Trim().ToUpperInvariant() == "B" ? "B" : "A";
+
+        /// <summary>Khuôn có cảm biến báo có hàng không. Không có thì dùng bit 'robot đặt xong' thay cho CHECKSENSOR.</summary>
+        public bool HasSensor => Config.GetString("HasSensor") != "false";
+
+        /// <summary>Khuôn không cảm biến: robot đã báo đặt hàng vào (bit M740) kể từ lần mở gần nhất.</summary>
+        public bool RobotPlaced { get; set; }
+
         private IEnumerable<DeviceViewModel> AllFixtures()
             => _owner.Devices.Where(d => d.Config.Type == DeviceType.Fixture && d.Enabled);
 
@@ -1049,6 +1070,8 @@ namespace UI.ViewModels.Device
         private string? CloseBlockReason()
         {
             if (IsOpen == false) return $"{Name}: khuôn đang đóng rồi";
+            if (!HasSensor)
+                return RobotPlaced ? null : $"{Name}: khuôn không có cảm biến, chưa nhận tín hiệu robot đặt hàng xong, không được đóng";
             if (Slots.All(x => x.SampleText.Length == 0)) return $"{Name}: chưa biết có hàng không (kiểm sensor chưa được)";
             if (!Slots.Any(x => x.SampleText == "Có bản")) return $"{Name}: không có hàng, không được đóng";
             return null;
@@ -1072,6 +1095,21 @@ namespace UI.ViewModels.Device
                 if (neighbour) return $"{Name}: {d.Name} (khuôn {d.FixtureNo:00}) báo lỗi khi mở, khuôn kề trên / dưới không được mở";
             }
 
+            string mode = OpenMode;
+            if (mode != DeviceSchemas.OpenModeStacked)
+            {
+                // Chế độ 2 bên / 1 khuôn: trong phạm vi (cùng bên, hoặc cả hệ thống) chỉ 1 khuôn được mở
+                foreach (var d in AllFixtures())
+                {
+                    if (d == this) continue;
+                    if (mode == DeviceSchemas.OpenModeSides && d.Side != Side) continue;
+                    string scope = mode == DeviceSchemas.OpenModeSides ? $"bên {Side}" : "hệ thống";
+                    if (d.IsOpen == true) return $"{Name}: {d.Name} (khuôn {d.FixtureNo:00}) đang mở, mỗi {scope} chỉ được mở 1 khuôn";
+                    if (d.IsOpen == null) return $"{Name}: chưa biết {d.Name} (khuôn {d.FixtureNo:00}) đang mở hay đóng, kiểm trạng thái trước";
+                }
+                return null;
+            }
+
             if (!ignoreBelow && BelowNo > 0)
             {
                 var below = AllFixtures().FirstOrDefault(d => d != this && d.FixtureNo == BelowNo);
@@ -1092,11 +1130,13 @@ namespace UI.ViewModels.Device
                     return OpenBlockReason();
 
                 case FixtureCommand.Close:
-                    await SendFixtureCommandAsync(transport, FixtureCommand.CheckSensor);   // luôn lấy hiện trạng hàng trước khi đóng
+                    if (HasSensor) await SendFixtureCommandAsync(transport, FixtureCommand.CheckSensor);   // lấy hiện trạng hàng trước khi đóng
                     return CloseBlockReason();
 
                 case FixtureCommand.OpenAll:
                     {
+                        if (OpenMode != DeviceSchemas.OpenModeStacked)
+                            return "OPEN ALL không dùng được ở chế độ này (mỗi bên / toàn hệ thống chỉ mở 1 khuôn)";
                         foreach (var d in AllFixtures())
                         {
                             if (d.IsOpen == true) continue;
@@ -1115,7 +1155,7 @@ namespace UI.ViewModels.Device
                             if (d.IsOpen == false) continue;
                             if (d._owner.Manager.GetLink(d.Id) is not ITransport t || !t.IsConnected)
                                 return $"{d.Name}: chưa kết nối, không kiểm được có hàng";
-                            await d.SendFixtureCommandAsync(t, FixtureCommand.CheckSensor);
+                            if (d.HasSensor) await d.SendFixtureCommandAsync(t, FixtureCommand.CheckSensor);
                             string? r = d.CloseBlockReason();
                             if (r != null) return r;
                         }

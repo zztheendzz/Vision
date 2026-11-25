@@ -21,6 +21,18 @@ namespace Vision.Core
         /// </summary>
         public int Fov { get; }
 
+        /// <summary>Mẫu / hiệu chuẩn của FOV (bảng FOV). Trống = dùng đường dẫn đặt trong node.</summary>
+        public string? ModelPathOverride { get; }
+        public string? CalibrationPathOverride { get; }
+
+        /// <summary>Đường dẫn file mẫu: của bảng FOV nếu có, không thì từ node; rồi thay {FOV}.</summary>
+        public bool TryResolveModelPath(string template, out string path, out string? error)
+            => TryResolvePath(string.IsNullOrWhiteSpace(ModelPathOverride) ? template : ModelPathOverride!, out path, out error);
+
+        /// <summary>Đường dẫn file hiệu chuẩn: của bảng FOV nếu có, không thì từ node; rồi thay {FOV}.</summary>
+        public bool TryResolveCalibrationPath(string template, out string path, out string? error)
+            => TryResolvePath(string.IsNullOrWhiteSpace(CalibrationPathOverride) ? template : CalibrationPathOverride!, out path, out error);
+
         /// <summary>Thay {FOV} trong đường dẫn bằng số FOV của lượt. Không có {FOV} thì giữ nguyên. Có {FOV} mà chưa chọn FOV thì báo lỗi.</summary>
         public bool TryResolvePath(string template, out string path, out string? error)
         {
@@ -43,16 +55,20 @@ namespace Vision.Core
             CancellationToken cancellationToken = default,
             IVisionLogger? logger = null,
             bool needDisplay = true,
-            int fov = -1)
+            int fov = -1,
+            string? modelPathOverride = null,
+            string? calibrationPathOverride = null)
         {
             Mode = mode;
             CancellationToken = cancellationToken;
             Logger = logger ?? NullVisionLogger.Instance;
             NeedDisplay = needDisplay;
             Fov = fov;
+            ModelPathOverride = modelPathOverride;
+            CalibrationPathOverride = calibrationPathOverride;
         }
 
         public ToolContext WithLogger(IVisionLogger logger)
-            => new(Mode, CancellationToken, logger, NeedDisplay, Fov);
+            => new(Mode, CancellationToken, logger, NeedDisplay, Fov, ModelPathOverride, CalibrationPathOverride);
     }
 }

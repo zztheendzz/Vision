@@ -362,7 +362,7 @@ namespace UI.Services
 
                 if (err > plan.MaxAngleErrorDeg && Math.Abs(Pose2D.NormalizeAngle(measured + expected)) < plan.MaxAngleErrorDeg * 2)
                     warnings.Add($"Dấu góc có vẻ NGƯỢC: robot xoay {expected:+0.##;-0.##}° nhưng ảnh đo {measured:+0.##;-0.##}°. " +
-                                 "Dùng 'Đảo chiều góc' khi gửi tọa độ, hoặc kiểm tra quy ước trục xoay.");
+                                 "Bật tham số InvertRz (Đảo dấu góc) ở node PickCompensation / PlaceCompensation / PixelToRobot, và tick 'Đảo chiều góc' ở cửa sổ này khi gửi điểm chụp. X, Y vẫn đúng.");
             }
 
             if (worst > plan.MaxAngleErrorDeg && !warnings.Any(w => w.Contains("NGƯỢC")))

@@ -1,6 +1,7 @@
 ﻿using Communication.Configuration;
 using Communication.Drivers;
 using Communication.Fixtures;
+using Communication.Transport;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -45,6 +46,40 @@ namespace UI.ViewModels.Device
 
         /// <summary>Nhật ký gửi/nhận của các khuôn test (giữ tối đa 500 dòng gần nhất).</summary>
         public ObservableCollection<LogLine> FixtureLog { get; } = new();
+
+        /// <summary>
+        /// DEBUG: mọi byte nhận / gửi của khuôn test (kể cả cổng nhận và quét), hiện rõ ký tự kết thúc và mã hex.
+        /// Để xem khuôn thực sự gửi những ký tự gì. Sau khi chỉnh xong mẫu thì xóa ô này (cùng lớp RawTrace).
+        /// </summary>
+        public ObservableCollection<LogLine> RawLog { get; } = new();
+
+        private void OnRawFrame(string source, string direction, byte[] data)
+        {
+            var line = new LogLine(DateTime.Now.ToString("HH:mm:ss.fff"), source, direction, RawTrace.Describe(data));
+            void Add()
+            {
+                RawLog.Add(line);
+                while (RawLog.Count > 1000) RawLog.RemoveAt(0);
+            }
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess()) Add();
+            else dispatcher.BeginInvoke(Add);
+        }
+
+        [RelayCommand]
+        private void ClearRawLog() => RawLog.Clear();
+
+        [RelayCommand]
+        private void CopyRawLog()
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(string.Join(Environment.NewLine,
+                    RawLog.Select(l => $"{l.Time}  {l.Source}  {l.Kind}  {l.Text}")));
+                StatusMessage = "Đã chép nhật ký thô vào clipboard";
+            }
+            catch (Exception ex) { StatusMessage = "Không chép được: " + ex.Message; }
+        }
 
         /// <summary>Thêm một dòng vào nhật ký khuôn test (gọi từ luồng nào cũng được).</summary>
         public void AddFixtureLog(string source, string kind, string text)
@@ -206,6 +241,7 @@ namespace UI.ViewModels.Device
                 bool handled = fixtures.Any(d => d.ApplyLine(line));                 // kết quả slot: P_01_02...
                 if (!handled)
                     foreach (var d in fixtures) handled |= d.TryApplyReply(line);    // trả lời lệnh: OPEN_01_OK, YES_01, OPENED_01, OPEN_ALL_OK...
+                Types.FirstOrDefault(t => t.IsFixture)?.NoteInbound(remote, line);   // khuôn lạ tự nối vào: đưa vào bảng quét
                 if (!handled) AddFixtureLog("Cổng nhận", "INFO", "Dòng này không khớp mẫu kết quả hay trả lời lệnh nào, hoặc số khuôn không có trong danh sách");
             }
 
@@ -238,6 +274,7 @@ namespace UI.ViewModels.Device
             _dialogs = dialogs;
             _catalog = store.Load();
             Manager = new DeviceManager(_catalog);
+            RawTrace.Frame += OnRawFrame;
 
             foreach (var schema in DeviceSchemas.All)
                 Types.Add(new DeviceTypeViewModel(schema, _catalog, this, dialogs));
@@ -383,6 +420,7 @@ namespace UI.ViewModels.Device
             _autoSave?.Stop();
             if (IsDirty) TrySaveQuietly();        // lưu nốt khi đóng
             _listener?.Dispose();
+            RawTrace.Frame -= OnRawFrame;
 
             // Thoát app thì trả quyền điều khiển robot cho PLC, trước khi ngắt các kết nối
             try

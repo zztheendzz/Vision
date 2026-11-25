@@ -239,12 +239,40 @@ namespace Communication.Configuration
                 }
 #endif
 
+                // Chế độ ghi đè điểm đã bị bỏ: robot đang đặt chế độ đó thì chuyển về gửi độ lệch (điểm trung gian)
+                if (d.Type == DeviceType.Robot && d.Values.TryGetValue("SendMode", out var sendMode)
+                    && sendMode == DeviceSchemas.RobotSendOverwrite)
+                {
+                    d.Values["SendMode"] = DeviceSchemas.RobotSendOffset;
+                    notes.Add($"{d.Name}: chế độ 'Ghi đè điểm' đã bị bỏ, chuyển sang '{DeviceSchemas.RobotSendOffset}'. Kiểm tra lại cách robot nhận độ bù.");
+                }
+
                 if (d.SourcePlcId is Guid plc && !Devices.Any(x => x.Id == plc && x.Type == DeviceType.PLC))
                 {
                     d.SourcePlcId = null;
                     notes.Add($"{d.Name}: PLC nguồn cũ không còn, đã bỏ chọn.");
                 }
             }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             return notes;
         }
     }

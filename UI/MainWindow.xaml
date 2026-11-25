@@ -85,6 +85,7 @@
                 <MenuItem Header="Cấu hình thiết bị..." Click="OpenDeviceConfig_Click" />
                 <MenuItem Header="Bản đồ tín hiệu PLC..." Click="OpenPlcMap_Click" />
                 <MenuItem Header="Điều khiển robot + camera (cửa sổ thả nổi)..." Click="OpenRobotControl_Click" />
+                <MenuItem Header="Bảng FOV (camera / nhánh / mẫu / hiệu chuẩn)..." Click="OpenFovTable_Click" />
             </MenuItem>
             <MenuItem Header="C_ông cụ">
                 <MenuItem IsEnabled="False" Header="Tùy chọn..." />

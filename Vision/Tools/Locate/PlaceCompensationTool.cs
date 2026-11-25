@@ -82,6 +82,7 @@ namespace Vision.Tools.Locate
             new ParamDef("PlaceRz", typeof(double), 0.0, Description: "Rz của TCP lúc đặt vào khuôn đã dạy (độ). Cần cho Additive"),
             new ParamDef("PlaceX",  typeof(double), 0.0, Description: "X của TCP lúc đặt đã dạy (mm). Chỉ cần cho AboutRobotOrigin và đầu ra Place"),
             new ParamDef("PlaceY",  typeof(double), 0.0, Description: "Y của TCP lúc đặt đã dạy (mm). Chỉ cần cho AboutRobotOrigin và đầu ra Place"),
+            new ParamDef("InvertRz", typeof(bool), false, Description: "Đảo dấu góc Rz gửi cho robot. Bật khi calib báo \"Dấu góc có vẻ NGƯỢC\" (robot xoay +, ảnh đo -): trục xoay của robot ngược chiều với hệ tọa độ X-Y đã calib"),
             new ParamDef("MaxShiftMm",  typeof(double), 20.0, Min: 0, Description: "Vật lệch trong tay quá số mm này thì từ chối"),
             new ParamDef("MaxAngleDeg", typeof(double), 15.0, Min: 0, Max: 180, Description: "Vật xoay trong tay quá số độ này thì từ chối")
         };
@@ -94,7 +95,7 @@ namespace Vision.Tools.Locate
             string template = input.Get<string>("CalibrationPath");
             if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt CalibrationPath");
-            if (!context.TryResolvePath(template, out string path, out string? pathError))
+            if (!context.TryResolveCalibrationPath(template, out string path, out string? pathError))
                 return VisionToolResult.ConfigError(pathError!);
 
             var now = input.Get<Pose2D>("Pose");
@@ -121,14 +122,17 @@ namespace Vision.Tools.Locate
             if (Math.Abs(angle) > maxAngle)
                 return VisionToolResult.NoResult($"Vật xoay trong tay {angle:F2}°, vượt giới hạn {maxAngle:F2}°");
 
-            var photo = new Rigid2D(input.Get<double>("PhotoX"), input.Get<double>("PhotoY"), input.Get<double>("PhotoRz"));
-            var taught = new Rigid2D(input.Get<double>("PlaceX"), input.Get<double>("PlaceY"), input.Get<double>("PlaceRz"));
+            // Trục xoay robot ngược chiều: đổi góc robot đọc sang hệ hình học (đảo dấu) để tính, rồi đảo lại khi xuất
+            double s = input.Get<bool>("InvertRz") ? -1.0 : 1.0;
+            var photo = new Rigid2D(input.Get<double>("PhotoX"), input.Get<double>("PhotoY"), s * input.Get<double>("PhotoRz"));
+            var taught = new Rigid2D(input.Get<double>("PlaceX"), input.Get<double>("PlaceY"), s * input.Get<double>("PlaceRz"));
 
             var t = oNow.Compose(oRef.Inverse());                              // T = O_now · O_ref⁻¹
             var d = photo.Inverse().Compose(t).Compose(photo);                 // D = F_ph⁻¹ · T · F_ph
             var place = taught.Compose(d.Inverse());                           // F_place = F_taught · D⁻¹
 
             var placePose = place.ToPose();
+            if (s < 0) placePose = new RobotPose(placePose.X, placePose.Y, Pose2D.NormalizeAngle(-placePose.Rz));
             RobotOffset offset;
             switch (input.Get<PlaceOffsetConvention>("Convention"))
             {
@@ -148,6 +152,8 @@ namespace Vision.Tools.Locate
                         Pose2D.NormalizeAngle(place.ThetaDeg - taught.ThetaDeg));
                     break;
             }
+
+            if (s < 0) offset = new RobotOffset(offset.Dx, offset.Dy, Pose2D.NormalizeAngle(-offset.Drz));
 
             var result = VisionToolResult.Ok($"Lệch trong tay {shift:F2} mm, {angle:F2}° → bù {offset}")
                 .Add("Place", placePose)

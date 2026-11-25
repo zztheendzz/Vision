@@ -37,6 +37,7 @@ namespace Vision.Tools.Locate
         public override IReadOnlyList<ParamDef> Parameters { get; } = new[]
         {
             new ParamDef("CalibrationPath", typeof(string), "calibration.json", Description: "File hiệu chuẩn camera - robot"),
+            new ParamDef("InvertRz", typeof(bool), false, Description: "Đảo dấu góc Rz gửi cho robot. Bật khi calib báo \"Dấu góc có vẻ NGƯỢC\" (robot xoay +, ảnh đo -): trục xoay của robot ngược chiều với hệ tọa độ X-Y đã calib"),
             new ParamDef("GraspOffsetX",  typeof(double), 0.0, Description: "Lệch điểm gắp theo X robot (mm), đo khi vật ở góc 0"),
             new ParamDef("GraspOffsetY",  typeof(double), 0.0, Description: "Lệch điểm gắp theo Y robot (mm), đo khi vật ở góc 0"),
             new ParamDef("GraspOffsetRz", typeof(double), 0.0, Description: "Lệch góc gắp so với góc vật (độ)")
@@ -50,7 +51,7 @@ namespace Vision.Tools.Locate
             string template = input.Get<string>("CalibrationPath");
             if (string.IsNullOrWhiteSpace(template))
                 return VisionToolResult.ConfigError("Chưa đặt CalibrationPath");
-            if (!context.TryResolvePath(template, out string path, out string? pathError))
+            if (!context.TryResolveCalibrationPath(template, out string path, out string? pathError))
                 return VisionToolResult.ConfigError(pathError!);
 
             var pose = input.Get<Pose2D>("Pose");
@@ -72,7 +73,7 @@ namespace Vision.Tools.Locate
             var robot = new RobotPose(
                 x + ox * Math.Cos(turn) - oy * Math.Sin(turn),
                 y + ox * Math.Sin(turn) + oy * Math.Cos(turn),
-                Pose2D.NormalizeAngle(rz + input.Get<double>("GraspOffsetRz")));
+                Pose2D.NormalizeAngle((input.Get<bool>("InvertRz") ? -rz : rz) + input.Get<double>("GraspOffsetRz")));
 
             var result = VisionToolResult.Ok($"Robot {robot}").Add("Robot", robot);
             result.Values["X"] = robot.X.ToString("F3", CultureInfo.InvariantCulture);

@@ -11,8 +11,6 @@ namespace Communication.Devices
     {
         /// <summary>Tính ra độ lệch (dX, dY, dRz) rồi ghi vào một biến điểm trung gian; chương trình robot tự cộng vào điểm.</summary>
         OffsetViaPoint,
-        /// <summary>App tự tính ra điểm mới (điểm đã chọn + độ lệch) rồi ghi đè lên điểm đó trong robot.</summary>
-        OverwritePoint,
         /// <summary>Gửi một gói tin chữ (mẫu do người dùng đặt) chứa độ lệch qua TCP tới chương trình robot.</summary>
         Packet,
         /// <summary>Độ bù được C# ghi vào các thanh ghi Calib X, Y, Z, R của PLC; PLC chuyển cho robot (robot không cần nối trực tiếp).</summary>

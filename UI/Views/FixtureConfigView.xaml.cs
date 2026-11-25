@@ -30,6 +30,8 @@ namespace UI.Views
             {
                 _log = vm.Log;
                 _log.CollectionChanged += OnLogChanged;
+                _raw = vm.RawLog;
+                _raw.CollectionChanged += OnRawChanged;
             }
         }
 
@@ -37,6 +39,23 @@ namespace UI.Views
         {
             if (_log != null) _log.CollectionChanged -= OnLogChanged;
             _log = null;
+            if (_raw != null) _raw.CollectionChanged -= OnRawChanged;
+            _raw = null;
+        }
+
+        private System.Collections.ObjectModel.ObservableCollection<LogLine>? _raw;
+
+        private void OnRawChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action != NotifyCollectionChangedAction.Add) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (RawLogList.Items.Count > 0) RawLogList.ScrollIntoView(RawLogList.Items[RawLogList.Items.Count - 1]);
+                }
+                catch (InvalidOperationException) { }
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void OnLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -8,6 +8,7 @@
              d:DesignHeight="450" d:DesignWidth="800">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <local:CountToVisibilityConverter x:Key="CountToVis" />
 
         <!-- Bảng tối (theme chung chưa có kiểu cho DataGrid) -->
         <Style TargetType="{x:Type DataGrid}">
@@ -114,6 +115,32 @@
             <TextBlock Text="{Binding ListenerStatus}" Margin="0,6,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
                        Foreground="{StaticResource VsTextBrush}" />
 
+            <!-- ============ QUÉT KHUÔN: gửi lệnh (mặc định ASK) tới tất cả để lấy IP, số khuôn, trạng thái ============ -->
+            <TextBlock Text="Quét khuôn" FontSize="14" FontWeight="SemiBold" Margin="0,18,0,4" />
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Quét khuôn (gửi lệnh quét)" Style="{StaticResource AccentButton}"
+                        Command="{Binding ScanFixturesCommand}"
+                        ToolTip="Gửi lệnh quét (mặc định ASK) tới mọi địa chỉ trong dải, cổng mặc định 9999. Đổi lệnh, cổng, dải IP, mẫu trả lời ở Cài đặt chung (mục Quét khuôn)." />
+                <Button Content="Dừng quét" Style="{StaticResource OutlineButton}" Command="{Binding StopScanCommand}" />
+                <Button Content="Thêm / cập nhật các dòng đã chọn" Style="{StaticResource OutlineButton}"
+                        Command="{Binding AddScannedCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding ScanStatus}" Margin="0,6,0,6" TextWrapping="Wrap" Foreground="{StaticResource VsMutedBrush}" />
+            <DataGrid ItemsSource="{Binding ScanResults}" Height="150" IsReadOnly="False"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding ScanResults.Count, Converter={StaticResource CountToVis}}">
+                <DataGrid.Columns>
+                    <DataGridCheckBoxColumn Header="Chọn" Binding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}" Width="52" />
+                    <DataGridTextColumn Header="IP" Binding="{Binding Ip}" IsReadOnly="True" Width="120" />
+                    <DataGridTextColumn Header="Cổng" Binding="{Binding Port}" IsReadOnly="True" Width="60" />
+                    <DataGridTextColumn Header="Khuôn (SS)" Binding="{Binding FixtureNo}" IsReadOnly="True" Width="84" />
+                    <DataGridTextColumn Header="Số slot" Binding="{Binding SlotCount}" IsReadOnly="True" Width="64" />
+                    <DataGridTextColumn Header="Tình trạng từng slot" Binding="{Binding Summary}" IsReadOnly="True" Width="*" />
+                    <DataGridTextColumn Header="Nguồn" Binding="{Binding Source}" IsReadOnly="True" Width="64" />
+                    <DataGridTextColumn Header="Sẽ" Binding="{Binding Action}" IsReadOnly="True" Width="170" />
+                </DataGrid.Columns>
+            </DataGrid>
+
             <!-- ============ DANH SÁCH KHUÔN TEST: mỗi khuôn một dòng ============ -->
             <DockPanel Margin="0,18,0,6">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -190,6 +217,28 @@
                             <DataTemplate>
                                 <TextBox Text="{Binding FieldMap[Slots].Text, UpdateSourceTrigger=LostFocus}" Style="{StaticResource CellBox}"
                                          ToolTip="{Binding FieldMap[Slots].Error}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Bên" Width="56">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox Margin="0,1" SelectedValuePath="Content"
+                                          SelectedValue="{Binding FieldMap[Side].Text, Mode=TwoWay}"
+                                          ToolTip="Khuôn nằm bên A hay bên B (dùng ở chế độ 2 bên A/B: mỗi bên chỉ 1 khuôn mở).">
+                                    <ComboBoxItem Content="A" />
+                                    <ComboBoxItem Content="B" />
+                                </ComboBox>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Cảm biến" Width="66">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding FieldMap[HasSensor].BoolValue}" HorizontalAlignment="Center"
+                                          ToolTip="Khuôn có cảm biến báo có hàng. Bỏ tick: dựa vào bit 'robot đặt xong' (M740)." />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -491,6 +540,33 @@
                                     <Setter TargetName="Body" Property="Foreground" Value="#FFB0B0" />
                                 </DataTrigger>
                             </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- ============ DEBUG: BYTE THÔ NHẬN / GỬI (xóa sau khi chỉnh xong mẫu) ============ -->
+            <DockPanel Margin="0,18,0,6">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Chép" Style="{StaticResource OutlineButton}" Command="{Binding CopyRawLogCommand}" />
+                    <Button Content="Xóa" Style="{StaticResource OutlineButton}" Command="{Binding ClearRawLogCommand}" />
+                </StackPanel>
+                <TextBlock Text="DEBUG – byte thô nhận / gửi từ các khuôn (tạm thời)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+            <TextBlock Margin="0,0,0,4" Foreground="{StaticResource VsMutedBrush}" FontSize="11" TextWrapping="Wrap"
+                       Text="Mọi thứ nhận được và gửi đi, kể cả cổng nhận và quét. &lt;CR&gt; = 0D, &lt;LF&gt; = 0A; trong ngoặc vuông là mã hex từng byte." />
+            <Border Background="#1B1B1C" BorderBrush="{StaticResource VsButtonBorderBrush}" BorderThickness="1" CornerRadius="4">
+                <ListBox x:Name="RawLogList" ItemsSource="{Binding RawLog}" Height="260" Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="13">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Time}" Width="100" Foreground="#B4B4B4" />
+                                <TextBlock Text="{Binding Source}" Width="190" FontWeight="SemiBold" Foreground="#9CDCFE" />
+                                <TextBlock Text="{Binding Kind}" Width="70" FontWeight="Bold" Foreground="#DCDCAA" />
+                                <TextBlock Text="{Binding Text}" Foreground="#FFFFFF" />
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>

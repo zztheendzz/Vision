@@ -70,6 +70,16 @@ namespace UI
 
         private void OpenRobotControl_Click(object sender, RoutedEventArgs e) => OpenRobotControl();
 
+        private void OpenFovTable_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new FovTableWindow
+            {
+                Owner = this,
+                DataContext = new ViewModels.FovTableViewModel(_viewModel.FovTable, _viewModel.Devices.Manager)
+            };
+            window.ShowDialog();
+        }
+
         /// <summary>Output tự cuộn xuống dòng mới nhất.</summary>
         private void OutputBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {

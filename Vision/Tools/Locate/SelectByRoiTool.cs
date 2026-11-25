@@ -20,14 +20,13 @@ namespace Vision.Tools.Locate
     }
 
     /// <summary>
-    /// Chọn vùng bằng ROI (vùng quan tâm). ROI mô tả hoàn toàn bằng tham số (hình, tâm, kích thước, góc) nên lưu được
-    /// vào recipe; sau này kéo vẽ trên khung ảnh sẽ chỉ ghi lại các tham số này.
+    /// Chọn vùng trên ảnh bằng ROI (vùng quan tâm), không làm gì khác. ROI mô tả hoàn toàn bằng tham số (hình, tâm, kích thước, góc)
+    /// nên lưu được vào recipe; kéo vẽ trên khung ảnh chỉ ghi lại các tham số này.
     ///
-    ///  - Có input Region: Region ra = giao của Region với ROI (chỉ giữ phần nằm trong ROI).
-    ///  - Không có Region: Region ra = chính ROI.
-    ///  - Có input Image: Image ra = ảnh đã thu hẹp miền xử lý về Region ra (các tool sau chỉ xử lý trong ROI).
-    /// Phải có ít nhất một trong hai input. Output nào không có input tương ứng thì không được trả.
-    /// ROI nằm ngoài vùng/ảnh (giao rỗng) → NoResult.
+    ///  - Input:  Image (bắt buộc).
+    ///  - Output Image:  chính ảnh gốc, giữ nguyên (không cắt, không thu hẹp miền).
+    ///  - Output Region: vùng ROI được chọn, tọa độ theo ảnh gốc. Tool sau (FindShape...) nối Image + Region để chỉ làm việc trong vùng này.
+    /// ROI nằm hoàn toàn ngoài ảnh (rỗng) → NoResult.
     /// Tọa độ tính theo pixel, gốc ở góc trên-trái ảnh: Row (hàng) xuống dưới, Column (cột) sang phải.
     /// </summary>
     [VisionTool("SelectByRoi", "Select By ROI", Group = "Định vị",
@@ -36,8 +35,7 @@ namespace Vision.Tools.Locate
     {
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]
         {
-            new PortDef("Image",  typeof(HImage),  Required: false),
-            new PortDef("Region", typeof(HRegion), Required: false)
+            new PortDef("Image", typeof(HImage))
         };
 
         public override IReadOnlyList<PortDef> Outputs { get; } = new[]
@@ -53,63 +51,43 @@ namespace Vision.Tools.Locate
 
         protected override VisionToolResult Execute(VisionToolInput input, ToolContext context)
         {
-            bool hasImage = input.TryGet<HImage>("Image", out var image);
-            bool hasRegion = input.TryGet<HRegion>("Region", out var region);
-            if (!hasImage && !hasRegion)
-                return VisionToolResult.ConfigError("Cần nối ít nhất một input: Image hoặc Region");
-
+            var image = input.Get<HImage>("Image");                  // chỉ mượn
             HRegion roi = RoiRegionFactory.Create(input);
-            HRegion final;
+            HImage? passthrough = null;
             try
             {
-                if (hasRegion)
-                {
-                    final = region.Intersection(roi);           // giao: chỉ giữ phần trong ROI
-                    roi.Dispose();                              // ROI chỉ là tạm
-                }
-                else
-                {
-                    final = roi;                                // ROI chính là kết quả
-                }
-            }
-            catch
-            {
+                // Chỉ giữ phần ROI nằm trong ảnh
+                image.GetImageSize(out int w, out int h);
+                using var frame = new HRegion();
+                frame.GenRectangle1(0.0, 0.0, h - 1, w - 1);
+                var inside = roi.Intersection(frame);
                 roi.Dispose();
-                throw;
-            }
+                roi = inside;
 
-            HImage? reduced = null;
-            try
-            {
-                double area = final.CountObj() == 0 ? 0 : final.AreaCenter(out double _, out double _);
+                double area = roi.CountObj() == 0 ? 0 : roi.AreaCenter(out double _, out double _);
                 if (area <= 0)
                 {
-                    final.Dispose();
-                    return VisionToolResult.NoResult("ROI không chứa vùng nào");
+                    roi.Dispose();
+                    return VisionToolResult.NoResult("ROI nằm ngoài ảnh");
                 }
 
-                // Có ảnh thì thu hẹp miền xử lý; ROI ngoài ảnh sẽ được Halcon cắt bớt
-                if (hasImage) reduced = image.ReduceDomain(final);
-
+                passthrough = image.CopyImage();                     // ảnh gốc nguyên vẹn, result sở hữu
                 var result = VisionToolResult.Ok($"ROI diện tích {area:F0}")
-                    .Add("Region", final);                      // result sở hữu và Dispose
-                if (reduced != null) result.Add("Image", reduced);
+                    .Add("Region", roi)                              // result sở hữu và Dispose
+                    .Add("Image", passthrough);
                 result.Values["RoiArea"] = area.ToString("F0");
 
                 if (context.NeedDisplay)
                 {
-                    // Hiển thị TOÀN ẢNH làm nền (Image ra đã thu hẹp miền nên chỉ còn phần trong ROI), vẽ ROI chồng lên:
-                    // người dùng thấy cả ảnh để kéo / đổi cỡ vùng chọn
-                    if (hasImage) result.AddDisplay(image.CopyImage());
-                    result.AddDisplay(final.CopyObj(1, -1));
+                    result.AddDisplay(image.CopyImage());            // toàn ảnh làm nền để kéo / đổi cỡ vùng chọn
+                    result.AddDisplay(roi.CopyObj(1, -1));
                 }
                 return result;
             }
             catch
             {
-                // Chưa giao cho result thì tự giải phóng, không rò rỉ
-                reduced?.Dispose();
-                final.Dispose();
+                passthrough?.Dispose();
+                roi.Dispose();
                 throw;
             }
         }

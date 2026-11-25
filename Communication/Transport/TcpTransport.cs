@@ -16,6 +16,10 @@ namespace Communication.Transport
         public TcpTransport(TcpOptions options) => _opt = options;
 
         public bool IsConnected => _client?.Connected == true;
+
+        /// <summary>Ký tự kết thúc đang dùng khi gửi / nhận (để nhật ký hiện rõ).</summary>
+        public byte[] TxTerminator => _opt.TxTerminator;
+        public byte[] RxTerminator => _opt.RxTerminator;
         public string Description => $"TCP {_opt.Host}:{_opt.Port}";
 
         /// <summary>Phía bên kia đóng hoặc đường truyền đứt thì ổ cắm báo "đọc được" mà không có dữ liệu.</summary>
@@ -115,6 +119,7 @@ namespace Communication.Transport
             body.CopyTo(frame, 0);
             _opt.TxTerminator.CopyTo(frame, body.Length);
             await stream.WriteAsync(frame, ct).ConfigureAwait(false);
+            RawTrace.Emit(_opt.Host + ":" + _opt.Port, "TX", frame);
         }
 
         // Bỏ dữ liệu cũ còn sót để không đọc nhầm trả lời của lệnh trước
@@ -124,7 +129,11 @@ namespace Communication.Transport
             var stream = _stream;
             if (stream == null) return;
             var junk = new byte[1024];
-            while (stream.DataAvailable) stream.Read(junk, 0, junk.Length);
+            while (stream.DataAvailable)
+            {
+                int got = stream.Read(junk, 0, junk.Length);
+                RawTrace.Emit(_opt.Host + ":" + _opt.Port, "RX (bỏ, dữ liệu cũ)", junk.AsSpan(0, got));
+            }
         }
 
         private async Task<string> ReadFrameAsync(CancellationToken ct)
@@ -143,6 +152,7 @@ namespace Communication.Transport
                 }
                 int n = await stream.ReadAsync(chunk, ct).ConfigureAwait(false);
                 if (n == 0) throw new IOException("Đầu kia đã đóng kết nối.");
+                RawTrace.Emit(_opt.Host + ":" + _opt.Port, "RX", chunk.AsSpan(0, n));
                 _buffer.AddRange(chunk.AsSpan(0, n).ToArray());
             }
         }
