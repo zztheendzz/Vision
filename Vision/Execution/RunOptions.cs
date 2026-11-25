@@ -35,9 +35,11 @@ namespace Vision.Execution
         /// <summary>Tên camera đầu tiên: node Camera Image để trống tham số Camera lấy camera này.</summary>
         public string? FirstCamera { get; set; }
 
-        /// <summary>File mẫu / file hiệu chuẩn của FOV này (từ bảng FOV). Có giá trị thì thay cho đường dẫn đặt trong node.</summary>
-        public string? ModelPath { get; set; }
-        public string? CalibrationPath { get; set; }
+        /// <summary>
+        /// Đường dẫn file mẫu / hiệu chuẩn theo TỪNG node (từ bảng FOV), khóa là Id node. Node có mặt ở đây dùng đường dẫn này
+        /// thay cho đường dẫn đặt trong node; node khác không bị ảnh hưởng.
+        /// </summary>
+        public Dictionary<Guid, (string? ModelPath, string? CalibrationPath)> NodePaths { get; } = new();
 
         public VisionToolInput Seed { get; } = new();
 

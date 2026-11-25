@@ -8,7 +8,7 @@ using Vision.Tools.Registry;
 
 namespace Vision.Tools.Locate
 {
-    [VisionTool("Threshold", "Threshold", Group = "Tiền xử lý", Description = "Tách vùng theo ngưỡng xám (có thể giới hạn trong một Region)")]
+    [VisionTool("ThresholdTool", "Threshold", Group = "Tiền xử lý", Description = "Tách vùng theo ngưỡng xám (có thể giới hạn trong một Region)")]
     public class ThresholdTool : PureToolBase
     {
         public override IReadOnlyList<PortDef> Inputs { get; } = new[]

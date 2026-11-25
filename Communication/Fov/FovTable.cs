@@ -6,7 +6,23 @@ using System.Text.Json;
 
 namespace Communication.Fov
 {
-    /// <summary>Một vùng chụp (FOV): PLC ghi số này vào thanh ghi FOV (vd D600), mỗi số gắn với camera, mẫu và hiệu chuẩn riêng.</summary>
+    /// <summary>Đường dẫn riêng cho MỘT node (tìm bằng Id node trong recipe). Một FOV có thể có nhiều node, mỗi node file riêng.</summary>
+    public class FovNodePath
+    {
+        /// <summary>Id node trong recipe (ổn định khi lưu / mở lại recipe).</summary>
+        public Guid NodeId { get; set; }
+
+        /// <summary>Nhãn để người dùng nhận ra node (tên tool + vị trí), chỉ để hiển thị.</summary>
+        public string Label { get; set; } = "";
+
+        /// <summary>File mẫu, chỉ dùng cho node FindShape. Trống = dùng đường dẫn đặt trong node.</summary>
+        public string ModelPath { get; set; } = "";
+
+        /// <summary>File hiệu chuẩn, chỉ dùng cho node Pick / Place / PixelToRobot. Trống = dùng đường dẫn đặt trong node.</summary>
+        public string CalibrationPath { get; set; } = "";
+    }
+
+    /// <summary>Một vùng chụp (FOV): PLC ghi số này vào thanh ghi FOV (vd D600), mỗi số gắn với một camera và đường dẫn riêng cho từng node.</summary>
     public class FovEntry
     {
         public bool Enabled { get; set; } = true;
@@ -15,11 +31,8 @@ namespace Communication.Fov
         /// <summary>Tên camera (đúng tên thiết bị). Chỉ camera này chụp và chỉ nhánh của nó chạy.</summary>
         public string Camera { get; set; } = "";
 
-        /// <summary>File mẫu FindShape dùng cho FOV này. Trống = dùng ModelPath đặt trong node.</summary>
-        public string ModelPath { get; set; } = "";
-
-        /// <summary>File hiệu chuẩn camera - robot dùng cho FOV này. Trống = dùng CalibrationPath đặt trong node.</summary>
-        public string CalibrationPath { get; set; } = "";
+        /// <summary>File mẫu / hiệu chuẩn theo TỪNG node. Node không có dòng ở đây dùng đường dẫn đặt trong chính node.</summary>
+        public System.Collections.ObjectModel.ObservableCollection<FovNodePath> Nodes { get; set; } = new();
     }
 
     /// <summary>Bảng FOV lưu thành file JSON riêng (fov.json cạnh devices.json), không nằm trong recipe.</summary>
@@ -61,8 +74,13 @@ namespace Communication.Fov
                 Enabled = e.Enabled,
                 Fov = e.Fov,
                 Camera = (e.Camera ?? "").Trim(),
-                ModelPath = (e.ModelPath ?? "").Trim(),
-                CalibrationPath = (e.CalibrationPath ?? "").Trim()
+                Nodes = new System.Collections.ObjectModel.ObservableCollection<FovNodePath>(e.Nodes.Select(n => new FovNodePath
+                {
+                    NodeId = n.NodeId,
+                    Label = n.Label ?? "",
+                    ModelPath = (n.ModelPath ?? "").Trim(),
+                    CalibrationPath = (n.CalibrationPath ?? "").Trim()
+                }))
             }).ToList();
 
             string? dir = Path.GetDirectoryName(FilePath);
@@ -82,6 +100,12 @@ namespace Communication.Fov
                 if (e.Fov < 0) return $"FOV {e.Fov}: số FOV không được âm";
                 if (!seen.Add(e.Fov)) return $"FOV {e.Fov} bị khai báo hai lần";
                 if (e.Enabled && string.IsNullOrWhiteSpace(e.Camera)) return $"FOV {e.Fov}: chưa chọn camera";
+                var nodes = new HashSet<Guid>();
+                foreach (var n in e.Nodes)
+                {
+                    if (n.NodeId == Guid.Empty) return $"FOV {e.Fov}: có dòng chưa chọn node";
+                    if (!nodes.Add(n.NodeId)) return $"FOV {e.Fov}: node '{n.Label}' bị khai báo hai lần";
+                }
             }
             return null;
         }

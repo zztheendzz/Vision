@@ -51,7 +51,7 @@ namespace UI
         }
 
         /// <summary>Mở cửa sổ thả nổi "Robot + camera" (chỉ một cửa sổ). Không khóa cửa sổ chính, kéo đặt cạnh ảnh được.</summary>
-        public void OpenRobotControl(ViewModels.Device.DeviceViewModel? robot = null)
+        public void OpenRobotControl(ViewModels.DeviceViewModel? robot = null)
         {
             if (_robotWindow != null)
             {
@@ -62,7 +62,7 @@ namespace UI
             _robotWindow = new RobotControlWindow
             {
                 Owner = this,
-                DataContext = new ViewModels.Device.RobotControlViewModel(_viewModel.Devices, robot)
+                DataContext = new ViewModels.RobotControlViewModel(_viewModel.Devices, robot)
             };
             _robotWindow.Closed += (_, _) => _robotWindow = null;
             _robotWindow.Show();
@@ -75,7 +75,7 @@ namespace UI
             var window = new FovTableWindow
             {
                 Owner = this,
-                DataContext = new ViewModels.FovTableViewModel(_viewModel.FovTable, _viewModel.Devices.Manager)
+                DataContext = new ViewModels.FovTableViewModel(_viewModel.FovTable, _viewModel.Devices.Manager, _viewModel.Editor.Model.Nodes)
             };
             window.ShowDialog();
         }

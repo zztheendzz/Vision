@@ -7,68 +7,91 @@
         mc:Ignorable="d"
         Title="FovTableWindow" Height="450" Width="800">
 
-        <Window.Resources>
-            <Style TargetType="{x:Type DataGrid}">
-                <Setter Property="Background" Value="{StaticResource VsPanelBrush}" />
-                <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
-                <Setter Property="RowBackground" Value="{StaticResource VsPanelBrush}" />
-                <Setter Property="AlternatingRowBackground" Value="#2A2A2D" />
-                <Setter Property="GridLinesVisibility" Value="Horizontal" />
-                <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource VsBorderBrush}" />
-                <Setter Property="HeadersVisibility" Value="Column" />
-                <Setter Property="AutoGenerateColumns" Value="False" />
-                <Setter Property="CanUserAddRows" Value="False" />
-                <Setter Property="CanUserDeleteRows" Value="False" />
-                <Setter Property="SelectionMode" Value="Single" />
-                <Setter Property="RowHeight" Value="30" />
-            </Style>
-            <Style TargetType="{x:Type DataGridColumnHeader}">
-                <Setter Property="Background" Value="{StaticResource VsPanelHeaderBrush}" />
-                <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
-                <Setter Property="BorderThickness" Value="0,0,1,1" />
-                <Setter Property="Padding" Value="6,5" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-            </Style>
-            <Style TargetType="{x:Type DataGridCell}">
-                <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Padding" Value="4,2" />
-            </Style>
-        </Window.Resources>
 
-        <DockPanel Margin="12">
-            <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource VsMutedBrush}"
-                   Text="PLC ghi số FOV vào thanh ghi FOV (mặc định D600) rồi bật bit chụp. Mỗi số FOV chỉ chụp camera của dòng đó, chỉ chạy nhánh bắt đầu từ node Camera Image của camera đó, và dùng file mẫu / hiệu chuẩn của dòng đó (để trống file = dùng đường dẫn đặt trong node). Bảng trống: chạy như cũ (mọi camera, mọi nhánh). Dùng {FOV} trong đường dẫn nếu muốn." />
+    <Window.Resources>
+        <Style TargetType="{x:Type DataGrid}">
+            <Setter Property="Background" Value="{StaticResource VsPanelBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="RowBackground" Value="{StaticResource VsPanelBrush}" />
+            <Setter Property="AlternatingRowBackground" Value="#2A2A2D" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="SelectionMode" Value="Single" />
+            <Setter Property="RowHeight" Value="30" />
+        </Style>
+        <Style TargetType="{x:Type DataGridColumnHeader}">
+            <Setter Property="Background" Value="{StaticResource VsPanelHeaderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource VsBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style TargetType="{x:Type DataGridCell}">
+            <Setter Property="Foreground" Value="{StaticResource VsTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,2" />
+        </Style>
+    </Window.Resources>
 
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="+ Thêm FOV" Style="{StaticResource OutlineButton}" Command="{Binding AddCommand}" />
-                <Button Content="Xóa dòng chọn" Style="{StaticResource OutlineButton}" Command="{Binding RemoveCommand}" />
-                <Button Content="Lưu" Style="{StaticResource OutlineButton}" Command="{Binding SaveCommand}" />
-            </StackPanel>
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource VsMutedBrush}"
+                   Text="PLC ghi số FOV vào thanh ghi FOV (mặc định D600) rồi bật bit chụp. Mỗi số FOV chỉ chụp camera của dòng đó và chỉ chạy nhánh bắt đầu từ node Camera Image của camera đó. File mẫu / hiệu chuẩn gán RIÊNG cho từng node (bảng dưới, theo FOV đang chọn): FOV có nhiều FindShape thì mỗi node một file. Node không có dòng ở đây dùng đường dẫn đặt trong node. Bảng trống: chạy như cũ." />
 
-            <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" Text="{Binding StatusMessage}" TextWrapping="Wrap"
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="+ Thêm FOV" Style="{StaticResource OutlineButton}" Command="{Binding AddCommand}" />
+            <Button Content="Xóa dòng chọn" Style="{StaticResource OutlineButton}" Command="{Binding RemoveCommand}" />
+            <Button Content="Lưu" Style="{StaticResource OutlineButton}" Command="{Binding SaveCommand}" />
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" Text="{Binding StatusMessage}" TextWrapping="Wrap"
                    Foreground="{StaticResource VsMutedBrush}" />
 
-            <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}">
+        <!-- Đường dẫn riêng theo từng node của FOV đang chọn -->
+        <DockPanel DockPanel.Dock="Bottom" Height="190" Margin="0,10,0,0">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="Đường dẫn theo node (của FOV đang chọn)" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Button Content="+ Thêm node" Style="{StaticResource OutlineButton}" Command="{Binding AddNodeCommand}" />
+                <Button Content="Xóa node chọn" Style="{StaticResource OutlineButton}" Command="{Binding RemoveNodeCommand}" />
+            </StackPanel>
+            <DataGrid ItemsSource="{Binding Selected.Nodes}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
                 <DataGrid.Columns>
-                    <DataGridCheckBoxColumn Header="Bật" Binding="{Binding Enabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="46" />
-                    <DataGridTextColumn Header="FOV" Binding="{Binding Fov, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" />
+                    <DataGridTemplateColumn Header="Node" Width="240">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox Margin="0,1" DisplayMemberPath="Label" SelectedValuePath="Id"
+                                          ItemsSource="{Binding DataContext.NodeChoices, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                          SelectedValue="{Binding NodeId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="File mẫu (chỉ FindShape)" Binding="{Binding ModelPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                    <DataGridTextColumn Header="File hiệu chuẩn (chỉ Pick / Place / PixelToRobot)" Binding="{Binding CalibrationPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DockPanel>
+
+        <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="Bật" Binding="{Binding Enabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="46" />
+                <DataGridTextColumn Header="FOV" Binding="{Binding Fov, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" />
                 <DataGridTemplateColumn Header="Camera" Width="170">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox IsEditable="False" Margin="0,1"
-                      ItemsSource="{Binding DataContext.Cameras, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                      SelectedItem="{Binding Camera, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                      ItemsSource="{Binding DataContext.Cameras, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                      SelectedItem="{Binding Camera, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="File mẫu (FindShape)" Binding="{Binding ModelPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*" />
-                    <DataGridTextColumn Header="File hiệu chuẩn" Binding="{Binding CalibrationPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </DockPanel>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
 
 </Window>

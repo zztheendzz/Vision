@@ -68,6 +68,12 @@ namespace Vision.Core
             CalibrationPathOverride = calibrationPathOverride;
         }
 
+        /// <summary>Bản sao dành riêng cho một node: có đường dẫn mẫu / hiệu chuẩn của node đó (từ bảng FOV).</summary>
+        public ToolContext WithPaths(string? modelPath, string? calibrationPath)
+            => new(Mode, CancellationToken, Logger, NeedDisplay, Fov,
+                   string.IsNullOrWhiteSpace(modelPath) ? ModelPathOverride : modelPath,
+                   string.IsNullOrWhiteSpace(calibrationPath) ? CalibrationPathOverride : calibrationPath);
+
         public ToolContext WithLogger(IVisionLogger logger)
             => new(Mode, CancellationToken, logger, NeedDisplay, Fov, ModelPathOverride, CalibrationPathOverride);
     }

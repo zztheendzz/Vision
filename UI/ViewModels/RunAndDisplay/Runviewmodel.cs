@@ -290,13 +290,14 @@ namespace UI.ViewModels.RunAndDisplay
 
                 options.ActiveCamera = entry.Camera;
                 options.FirstCamera = _devices.CameraNames.FirstOrDefault();
-                options.ModelPath = entry.ModelPath;
-                options.CalibrationPath = entry.CalibrationPath;
+                foreach (var n in entry.Nodes)
+                    options.NodePaths[n.NodeId] = (n.ModelPath, n.CalibrationPath);
+                var present = _editor.Model.Nodes.Select(x => x.Id).ToHashSet();
+                foreach (var n in entry.Nodes.Where(n => !present.Contains(n.NodeId)))
+                    AppendLog($"[FOV {entry.Fov} - CẢNH BÁO] Node '{n.Label}' trong bảng FOV không còn trong recipe này, bỏ qua dòng đó.");
                 if (imageSource != null)
                     imageSource = c => GrabCamerasAsync(c, entry.Camera);
-                AppendLog($"[FOV {entry.Fov}] camera '{entry.Camera}'" +
-                          (entry.ModelPath.Length > 0 ? $", mẫu {entry.ModelPath}" : "") +
-                          (entry.CalibrationPath.Length > 0 ? $", hiệu chuẩn {entry.CalibrationPath}" : ""));
+                AppendLog($"[FOV {entry.Fov}] camera '{entry.Camera}', {entry.Nodes.Count} node có đường dẫn riêng");
             }
             if (previewOnly)
             {

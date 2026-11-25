@@ -6,7 +6,6 @@ using Vision.Services;
 
 namespace Vision.Execution
 {
-
     public enum NodeStatus { Pending, Ok, Failed, Skipped }
 
     public class NodeRun
@@ -54,7 +53,7 @@ namespace Vision.Execution
             var order = graph.GetTopologicalOrder();
 
             // Một ToolContext chung cho cả lượt: Mode / NeedDisplay lấy từ RunOptions
-            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay, options.Fov, options.ModelPath, options.CalibrationPath);
+            var context = new ToolContext(options.Mode, ct, _logger, options.NeedDisplay, options.Fov);
 
             // Chụp tham số hiệu lực ngay đầu lượt: UI sửa node giữa chừng không ảnh hưởng lượt đang chạy
             var effective = BuildEffectiveParameters(graph, options);
@@ -111,7 +110,10 @@ namespace Vision.Execution
                         VisionToolResult result;
                         try
                         {
-                            result = node.Tool.Run(input, context);
+                            var nodeContext = options.NodePaths.TryGetValue(node.Id, out var nodePaths)
+                                ? context.WithPaths(nodePaths.ModelPath, nodePaths.CalibrationPath)   // đường dẫn riêng của node này theo bảng FOV
+                                : context;
+                            result = node.Tool.Run(input, nodeContext);
                         }
                         catch (OperationCanceledException) when (ct.IsCancellationRequested)
                         {
