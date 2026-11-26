@@ -155,6 +155,18 @@ namespace UI.ViewModels.RunAndDisplay
             StatusText = "Sẵn sàng";
         }
 
+        /// <summary>Mọi node ReadCode chạy xong có mã thì đưa mã vào hàng đợi của bộ quản lý mã test.</summary>
+        private void EnqueueScannedCodes(Vision.Graph.VisionGraph graph, GraphRunResult run)
+        {
+            if (FixtureRoot == null) return;
+            foreach (var node in graph.Nodes.Where(n => n.ToolName == "ReadCode"))
+            {
+                if (!run.Nodes.TryGetValue(node.Id, out var nr) || nr.Status != NodeStatus.Ok || nr.OffBranch || nr.Result == null) continue;
+                if (nr.Result.Values.TryGetValue("Text", out var text) && !string.IsNullOrWhiteSpace(text))
+                    FixtureRoot.Jobs.Enqueue(text);
+            }
+        }
+
         // ================= XEM MẪU / XÓA VẼ TAY =================
 
         /// <summary>true ngay sau một lần "Xem mẫu" thành công: khung ảnh xử lý hiện công cụ xóa vẽ tay. Học mẫu hoặc chạy lượt khác thì tắt.</summary>
@@ -381,6 +393,10 @@ namespace UI.ViewModels.RunAndDisplay
                 UpdateViewers();
                 if (previewOnly && bad == 0) SetPreviewActive(true);
                 verdict = CycleRecordBuilder.Evaluate(graph, run).Verdict;
+
+                // Chạy thật: mã QR đọc được vào hàng đợi mã test (robot sắp gắp bỏ vào khuôn)
+                if (mode == RunMode.Live && targetNode == null && !previewOnly && verdict == RunVerdict.Ok)
+                    EnqueueScannedCodes(graph, run);
 
                 // Chạy thật: gửi độ bù (hoặc NG) cho robot. Chạy thử / học mẫu thì bộ gửi tự bỏ qua.
                 var sent = await _dispatcher.DispatchAsync(graph, run, mode, ct);

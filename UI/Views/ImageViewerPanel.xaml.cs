@@ -68,6 +68,28 @@ namespace UI.Views
             DependencyProperty.Register(nameof(EraseAreas), typeof(string), typeof(ImageViewerPanel),
                                         new PropertyMetadata(null, (d, _) => ((ImageViewerPanel)d).Render()));
 
+        public static readonly DependencyProperty BrushModeProperty =
+            DependencyProperty.Register(nameof(BrushMode), typeof(bool), typeof(ImageViewerPanel),
+                                        new PropertyMetadata(false, (d, _) => ((ImageViewerPanel)d).UpdateEraseButtons()));
+
+        public static readonly DependencyProperty UndoEraseCommandProperty =
+            DependencyProperty.Register(nameof(UndoEraseCommand), typeof(ICommand), typeof(ImageViewerPanel),
+                                        new PropertyMetadata(null));
+
+        /// <summary>true: vùng xóa dùng cọ tẩy theo con trỏ (khung Ảnh xử lý) thay cho hình chữ nhật / tròn.</summary>
+        public bool BrushMode
+        {
+            get { return (bool)GetValue(BrushModeProperty); }
+            set { SetValue(BrushModeProperty, value); }
+        }
+
+        /// <summary>Được gọi khi bấm "Hoàn tác" (bỏ nét tẩy vừa làm).</summary>
+        public ICommand? UndoEraseCommand
+        {
+            get { return (ICommand?)GetValue(UndoEraseCommandProperty); }
+            set { SetValue(UndoEraseCommandProperty, value); }
+        }
+
         public static readonly DependencyProperty EraseCommandProperty =
             DependencyProperty.Register(nameof(EraseCommand), typeof(ICommand), typeof(ImageViewerPanel),
                                         new PropertyMetadata(null));
@@ -157,6 +179,10 @@ namespace UI.Views
                 _ready = true;
                 Render();                          // có thể đã có ảnh trước khi cửa sổ sẵn sàng
             };
+            _window.HMouseDown += (_, e) => BrushDown(e);
+            _window.HMouseMove += (_, e) => BrushMove(e);
+            _window.HMouseUp += (_, e) => BrushUp(e);
+            _window.HMouseWheel += (_, e) => BrushWheel(e);
             ImageHost.Children.Add(_window);
         }
 
@@ -232,9 +258,7 @@ namespace UI.Views
             window.SetLineWidth(2);
             foreach (var a in areas)
             {
-                using var region = new HRegion();
-                if (a.IsCircle) region.GenCircle(a.Row, a.Column, a.A);
-                else region.GenRectangle2(a.Row, a.Column, a.PhiDeg * Math.PI / 180.0, a.A, a.B);
+                using var region = ShapeEraseAreas.MakeRegion(a);
                 window.DispObj(region);
             }
         }
@@ -243,13 +267,175 @@ namespace UI.Views
         {
             bool supported = EraseAreas != null && Display?.Image != null;
             bool editing = _eraseDraft != null;
+            bool brush = BrushMode;
 
-            EraseRectButton.Visibility = supported && !editing ? Visibility.Visible : Visibility.Collapsed;
-            EraseCircleButton.Visibility = supported && !editing ? Visibility.Visible : Visibility.Collapsed;
+            // Khung có cọ tẩy: bộ nút cọ thay cho nút hình chữ nhật / tròn
+            EraseRectButton.Visibility = supported && !editing && !brush ? Visibility.Visible : Visibility.Collapsed;
+            EraseCircleButton.Visibility = supported && !editing && !brush ? Visibility.Visible : Visibility.Collapsed;
+            BrushToggle.Visibility = supported && brush ? Visibility.Visible : Visibility.Collapsed;
+            BrushModeBox.Visibility = supported && brush ? Visibility.Visible : Visibility.Collapsed;
+            BrushSizeText.Visibility = supported && brush && BrushToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            EraseUndoButton.Visibility = supported && brush && !string.IsNullOrWhiteSpace(EraseAreas) ? Visibility.Visible : Visibility.Collapsed;
             EraseClearButton.Visibility = supported && !editing && !string.IsNullOrWhiteSpace(EraseAreas)
                 ? Visibility.Visible : Visibility.Collapsed;
             EraseOkButton.Visibility = supported && editing ? Visibility.Visible : Visibility.Collapsed;
             EraseCancelButton.Visibility = supported && editing ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!(supported && brush) && BrushToggle.IsChecked == true) BrushToggle.IsChecked = false;   // hết quyền tẩy: tắt cọ, trả lại kéo / zoom
+        }
+
+        // ================= TẨY THEO CON TRỎ =================
+
+        private double _brushRadius = 8;                         // pixel ảnh
+        private List<(double Row, double Col)>? _stroke;          // nét đang vẽ (null: chưa giữ chuột)
+        private (double Row, double Col)? _cursorShown;          // vòng tròn con trỏ đang vẽ (xor) để xóa đi vẽ lại
+
+        private bool BrushOn => BrushMode && BrushToggle.IsChecked == true && _ready && _window != null && Display?.Image != null;
+
+        private void BrushToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            bool on = BrushToggle.IsChecked == true;
+            if (_window != null)
+            {
+                // Đang tẩy thì kéo chuột không dời ảnh và lăn chuột không zoom (lăn chuột đổi cỡ cọ)
+                _window.HMoveContent = !on;
+                _window.HZoomContent = on ? HSmartWindowControlWPF.ZoomContent.Off : HSmartWindowControlWPF.ZoomContent.WheelForwardZoomsIn;
+            }
+            _stroke = null;
+            _cursorShown = null;
+            BrushSizeText.Text = $"Cỡ: {_brushRadius:0} px";
+            UpdateEraseButtons();
+            if (!on) Render();
+        }
+
+        private void BrushMode_Changed(object sender, SelectionChangedEventArgs e) { }
+
+        private bool BrushWholeContour => BrushModeBox.SelectedIndex == 1;
+
+        private void BrushWheel(HSmartWindowControlWPF.HMouseEventArgsWPF e)
+        {
+            if (!BrushOn) return;
+            _brushRadius = Math.Clamp(_brushRadius + (e.Delta > 0 ? 2 : -2), 2, 200);
+            BrushSizeText.Text = $"Cỡ: {_brushRadius:0} px";
+            DrawCursor(e.Row, e.Column);
+        }
+
+        private void BrushDown(HSmartWindowControlWPF.HMouseEventArgsWPF e)
+        {
+            if (!BrushOn || e.Button != System.Windows.Input.MouseButton.Left) return;
+            _stroke = new List<(double, double)> { (e.Row, e.Column) };
+            DrawStamp(e.Row, e.Column);
+            DrawCursor(e.Row, e.Column);
+        }
+
+        private void BrushMove(HSmartWindowControlWPF.HMouseEventArgsWPF e)
+        {
+            if (!BrushOn) return;
+            if (_stroke != null)
+            {
+                var last = _stroke[^1];
+                if (Math.Sqrt(Math.Pow(e.Row - last.Row, 2) + Math.Pow(e.Column - last.Col, 2)) >= Math.Max(1.0, _brushRadius / 2))
+                {
+                    _stroke.Add((e.Row, e.Column));
+                    EraseCursor();
+                    DrawStamp(e.Row, e.Column);
+                }
+            }
+            DrawCursor(e.Row, e.Column);
+        }
+
+        private void BrushUp(HSmartWindowControlWPF.HMouseEventArgsWPF e)
+        {
+            var stroke = _stroke;
+            _stroke = null;
+            _cursorShown = null;
+            if (stroke == null || !BrushOn) return;
+
+            var areas = BuildBrushAreas(stroke);
+            var command = EraseCommand;
+            foreach (var a in areas)
+                if (command != null && command.CanExecute(ShapeEraseAreas.Format(new[] { a }))) command.Execute(ShapeEraseAreas.Format(new[] { a }));
+            Render();                 // ảnh vẽ lại với các nét tẩy đã lưu (Xem mẫu lại để thấy viền mới)
+        }
+
+        /// <summary>Chế độ 1: một nét theo đường rê. Chế độ 2: mỗi đường viền bị nét chạm vào thành một nét phủ hết đường viền đó.</summary>
+        private List<ShapeEraseAreas.Area> BuildBrushAreas(List<(double Row, double Col)> stroke)
+        {
+            var result = new List<ShapeEraseAreas.Area>();
+
+            if (!BrushWholeContour)
+            {
+                var pts = new double[stroke.Count * 2];
+                for (int i = 0; i < stroke.Count; i++) { pts[2 * i] = Math.Round(stroke[i].Row, 1); pts[2 * i + 1] = Math.Round(stroke[i].Col, 1); }
+                result.Add(new ShapeEraseAreas.Area(false, stroke[0].Row, stroke[0].Col, _brushRadius, 0, 0, pts));
+                return result;
+            }
+
+            // Viền hiển thị là đối tượng XLD đầu tiên (viền mẫu); mỗi đường viền liền mạch là một phần tử
+            if (Display?.Overlays.Count > 0 && Display.Overlays[0] is HXLDCont xld)
+            {
+                try
+                {
+                    int count = xld.CountObj();
+                    for (int k = 1; k <= count; k++)
+                    {
+                        using var one = xld.SelectObj(k);
+                        one.GetContourXld(out HTuple rows, out HTuple cols);
+                        double[] r = rows.ToDArr(), c = cols.ToDArr();
+                        if (r.Length == 0 || !Touches(r, c, stroke)) continue;
+
+                        var list = new List<double>();
+                        for (int i = 0; i < r.Length; i += 3) { list.Add(Math.Round(r[i], 1)); list.Add(Math.Round(c[i], 1)); }
+                        if (list.Count == 0 || (list[^2] != Math.Round(r[^1], 1) || list[^1] != Math.Round(c[^1], 1)))
+                        { list.Add(Math.Round(r[^1], 1)); list.Add(Math.Round(c[^1], 1)); }
+                        if (list.Count >= 2) result.Add(new ShapeEraseAreas.Area(false, list[0], list[1], 4, 0, 0, list.ToArray()));
+                    }
+                }
+                catch (HalconException) { }
+            }
+            return result;
+        }
+
+        /// <summary>Có điểm nào của đường viền nằm trong bán kính cọ so với một điểm của nét không.</summary>
+        private bool Touches(double[] r, double[] c, List<(double Row, double Col)> stroke)
+        {
+            double limit = _brushRadius * _brushRadius;
+            foreach (var s in stroke)
+                for (int i = 0; i < r.Length; i++)
+                {
+                    double dr = r[i] - s.Row, dc = c[i] - s.Col;
+                    if (dr * dr + dc * dc <= limit) return true;
+                }
+            return false;
+        }
+
+        /// <summary>Vẽ ngay dấu cọ của nét đang rê (màu cam), chưa lưu; thả chuột mới lưu.</summary>
+        private void DrawStamp(double row, double col)
+        {
+            if (_window == null) return;
+            try
+            {
+                var window = _window.HalconWindow;
+                window.SetDraw("fill");
+                window.SetColor("orange");
+                using var disc = new HRegion();
+                disc.GenCircle(row, col, _brushRadius);
+                window.DispObj(disc);
+                window.SetDraw("margin");
+            }
+            catch (HalconException) { }
+        }
+
+        // Không vẽ vòng tròn con trỏ: phiên bản Halcon này không có HWindow.SetInsert (chế độ xor). Cỡ cọ hiện ở thanh tiêu đề,
+        // dấu cọ cam hiện ngay khi rê.
+        private void DrawCursor(double row, double col) { }
+
+        private void EraseCursor() { _cursorShown = null; }
+
+        private void EraseUndo_Click(object sender, RoutedEventArgs e)
+        {
+            var command = UndoEraseCommand;
+            if (command != null && command.CanExecute(null)) command.Execute(null);
         }
 
         private void BeginErase(bool circle)

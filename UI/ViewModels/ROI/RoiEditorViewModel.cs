@@ -102,6 +102,18 @@ namespace UI.ViewModels.ROI
             SetSketch(node, ShapeEraseAreas.Append(SketchAreas, parsed[0]));
         }
 
+        /// <summary>Hoàn tác nét tẩy vừa thêm (bỏ vùng cuối cùng trong SketchErase).</summary>
+        [RelayCommand]
+        private void UndoSketchArea()
+        {
+            var node = _editor.SelectedNode?.Model;
+            if (node == null || _editor.IsLocked || SketchAreas == null) return;
+            var list = ShapeEraseAreas.Parse(SketchAreas, out _);
+            if (list == null || list.Count == 0) return;
+            list.RemoveAt(list.Count - 1);
+            SetSketch(node, ShapeEraseAreas.Format(list));
+        }
+
         [RelayCommand]
         private void ClearSketchAreas()
         {

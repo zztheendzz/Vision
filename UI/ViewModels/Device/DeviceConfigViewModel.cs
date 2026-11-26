@@ -33,6 +33,9 @@ namespace UI.ViewModels.Device
         /// <summary>Giữ các kết nối đang sống; vòng chạy lấy robot/PLC đang nối từ đây.</summary>
         public DeviceManager Manager { get; }
 
+        /// <summary>Mã QR do vision quét ↔ khuôn test: hàng đợi, START, trạng thái lưu file.</summary>
+        public TestJobCoordinator Jobs { get; }
+
         /// <summary>Có thay đổi chưa lưu không (cửa sổ cấu hình hỏi trước khi đóng).</summary>
         public bool IsDirty { get; private set; }
 
@@ -274,6 +277,7 @@ namespace UI.ViewModels.Device
             _dialogs = dialogs;
             _catalog = store.Load();
             Manager = new DeviceManager(_catalog);
+            Jobs = new TestJobCoordinator(this);
             RawTrace.Frame += OnRawFrame;
 
             foreach (var schema in DeviceSchemas.All)

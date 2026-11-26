@@ -1,0 +1,63 @@
+﻿<Window x:Class="UI.Views.TestJobsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UI.Views"
+        mc:Ignorable="d"
+        Title="TestJobsWindow" Height="450" Width="800">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="MÃ ĐANG GẮN VỚI KHUÔN" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <DataGrid Grid.Row="1" x:Name="JobsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Khuôn" Binding="{Binding Fixture}" Width="60" />
+                <DataGridTextColumn Header="Mã" Binding="{Binding Code}" Width="*" />
+                <DataGridTextColumn Header="Bước" Binding="{Binding Step}" Width="120" />
+                <DataGridTextColumn Header="Kết quả" Binding="{Binding Result}" Width="80" />
+                <DataGridTextColumn Header="Lúc" Binding="{Binding At}" Width="80" />
+                <DataGridTextColumn Header="Ghi chú" Binding="{Binding Note}" Width="2*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,10">
+            <Button Content="Trả mã về hàng đợi" Click="ReturnJob_Click" Padding="10,3" Margin="0,0,8,0"
+                    ToolTip="Hàng chưa test (hoặc đã gắp ra): mã trở lại ĐẦU hàng đợi" />
+            <Button Content="Xóa bản ghi khuôn" Click="ClearJob_Click" Padding="10,3"
+                    ToolTip="Đã kiểm tra xong, bỏ bản ghi của khuôn đang chọn" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="2" HorizontalAlignment="Right" x:Name="HintText" Foreground="#FFB74D" VerticalAlignment="Center" />
+
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="HÀNG ĐỢI MÃ ĐÃ QUÉT (chưa vào khuôn)" FontWeight="SemiBold" Margin="0,0,0,6" />
+            <DataGrid Grid.Row="1" x:Name="QueueGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40" />
+                    <DataGridTextColumn Header="Mã" Binding="{Binding Code}" Width="*" />
+                    <DataGridTextColumn Header="Quét lúc" Binding="{Binding At}" Width="80" />
+                    <DataGridTextColumn Header="Trạng thái" Binding="{Binding Status}" Width="160" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+            <Button Content="Xác nhận tất cả mã" Click="ConfirmAll_Click" Padding="10,3" Margin="0,0,8,0"
+                    ToolTip="Sau khi app tắt, mã trong hàng đợi chỉ được dùng khi bạn xác nhận" />
+            <Button Content="Xóa mã đang chọn" Click="RemoveQueued_Click" Padding="10,3" />
+        </StackPanel>
+    </Grid>
+</Window>

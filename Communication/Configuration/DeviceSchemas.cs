@@ -89,7 +89,7 @@ namespace Communication.Configuration
             ("OpenAll",     "OPEN ALL – mở tất cả",      "OPEN_ALL",         "OPEN_ALL_OK",   "OPEN_ALL_ERROR_{SLOTS}"),
             ("CloseAll",    "CLOSE ALL – đóng tất cả",   "CLOSE_ALL",        "CLOSE_ALL_OK",  "CLOSE_ALL_ERROR_{SLOTS}"),
             ("CheckSensor", "CHECKSENSOR – kiểm cảm biến", "CHECKSENSOR_{SS}", "YES_{SS}",      "NO_{SS}"),
-            ("State",       "STATE – trạng thái khuôn",  "STATE_{SS}",       "OPENED_{SS}",   "CLOSED_{SS}"),
+            ("State",       "STATE – trạng thái slot",   "STATE_{SS}",       "",              ""),   // khuôn trả dòng kết quả slot (B_/P_/R_...), không phải OPENED/CLOSED
         };
 
         /// <summary>Kết quả slot: khóa, tên, mẫu nhận về (null = không có), mã gửi PLC (null = không gửi).</summary>

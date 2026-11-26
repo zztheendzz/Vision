@@ -21,6 +21,19 @@
                                   Checked="RoiToggle_Changed" Unchecked="RoiToggle_Changed"
                                   ToolTip="Vẽ / kéo ROI của node đang chọn ngay trên ảnh ở khung này thay vì ảnh gốc" />
                         <!-- Xóa viền khi học mẫu (chỉ hiện khi node đang chọn có tham số EraseAreas, vd FindShape) -->
+                        <!-- Tẩy theo con trỏ (khung Ảnh xử lý sau Xem mẫu): giữ chuột trái và rê để xóa, lăn chuột đổi cỡ -->
+                        <ToggleButton x:Name="BrushToggle" Content="Tẩy" Visibility="Collapsed" Checked="BrushToggle_Changed" Unchecked="BrushToggle_Changed"
+                                      Margin="0,0,4,0" Padding="8,0"
+                                      ToolTip="Bật tẩy: giữ chuột trái và rê lên các nét thừa để xóa. Lăn chuột để đổi cỡ tẩy" />
+                        <ComboBox x:Name="BrushModeBox" Visibility="Collapsed" SelectedIndex="0" Margin="0,0,4,0" MinWidth="170"
+                                  SelectionChanged="BrushMode_Changed">
+                            <ComboBoxItem Content="1: chỉ đoạn dưới con trỏ" />
+                            <ComboBoxItem Content="2: cả đường viền bị chạm" />
+                        </ComboBox>
+                        <TextBlock x:Name="BrushSizeText" Visibility="Collapsed" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Foreground="{StaticResource VsMutedBrush}" />
+                        <Button x:Name="EraseUndoButton" Content="Hoàn tác" Click="EraseUndo_Click" Visibility="Collapsed" Margin="0,0,4,0"
+                                ToolTip="Bỏ nét tẩy vừa làm" />
                         <Button x:Name="EraseRectButton" Content="+ Xóa ▭" Click="EraseRect_Click" Visibility="Collapsed"
                                 ToolTip="Thêm vùng chữ nhật: đường viền nằm trong vùng này sẽ KHÔNG vào mẫu. Kéo, đổi cỡ rồi bấm Xác nhận" />
                         <Button x:Name="EraseCircleButton" Content="+ Xóa ○" Click="EraseCircle_Click" Visibility="Collapsed"

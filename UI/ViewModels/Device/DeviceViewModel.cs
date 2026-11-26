@@ -828,7 +828,7 @@ namespace UI.ViewModels.Device
         {
             OpenFaulted = false;
             IsOpen = open;
-            if (open) RobotPlaced = false;       // vừa mở: chờ robot đặt hàng mới
+            if (open) { RobotPlaced = false; _owner.Jobs.OnOpened(FixtureNo); }   // vừa mở: chờ robot đặt hàng mới; mã đã xong được gỡ
             FixtureStateText = open ? "Đang mở" : "Đang đóng";
         }
         [ObservableProperty] private string _sensorText = "Chưa kiểm";
@@ -969,6 +969,19 @@ namespace UI.ViewModels.Device
             finally { FixtureBusy = false; }
         }
 
+        /// <summary>Gửi "START:&lt;mã&gt;" một lần tới khuôn này, không chờ trả lời, không gửi lại. Ném lỗi nếu chưa nối.</summary>
+        public async Task SendStartAsync(string code)
+        {
+            if (_owner.Manager.GetLink(Id) is not ITransport transport || !transport.IsConnected)
+                throw new InvalidOperationException("chưa kết nối khuôn này");
+
+            string text = "START:" + code;
+            var tcp = transport as TcpTransport;
+            Log("GỬI", text + (tcp != null ? RawTrace.Visible(tcp.TxTerminator) : ""));
+            await transport.SendAsync(text);
+            RunOnUi(() => Message = $"Gửi: {text}");
+        }
+
         // CHECKSENSOR chỉ gửi khi bấm nút hoặc trước khi đóng khuôn lúc chạy tự động; không kiểm tra liên tục.
         private bool _quietPoll;     // giữ cho Log() (không còn dùng để nén nhật ký)
 
@@ -1081,6 +1094,9 @@ namespace UI.ViewModels.Device
         private string? OpenBlockReason(bool ignoreBelow = false)
         {
             if (IsOpen == true) return $"{Name}: khuôn đang mở rồi";
+
+            string? jobReason = _owner.Jobs.OpenBlockReason(FixtureNo);       // mã chưa có kết quả cuối thì không mở
+            if (jobReason != null) return $"{Name}: {jobReason}";
 
             var busy = Slots.FirstOrDefault(x => x.State == SlotState.Busy);
             if (busy != null) return $"{Name}: {busy.Title} đang test, chưa được mở";
@@ -1239,6 +1255,7 @@ namespace UI.ViewModels.Device
                 var slot = Slots.FirstOrDefault(x => x.Number == nn);
                 if (slot != null) slot.State = state;
             });
+            _owner.Jobs.OnSlotResult(FixtureNo, state);          // mã đang test ở khuôn này: cập nhật bước / trả mã nếu REPAIR
             _ = WriteSlotResultToPlcAsync(nn, state);
             return true;
         }

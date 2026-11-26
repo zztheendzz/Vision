@@ -152,6 +152,13 @@ namespace UI.Services
                 return $"Không hạ được bit {bit}: {ex.Message}";
             }
             _log($"[khuôn] Đã {what.ToLowerInvariant()} khuôn {no:00}, hạ {bit} về 0.");
+
+            if (!open)
+            {
+                // Khuôn đã đóng: gắn mã quét đầu hàng đợi vào khuôn và gửi START một lần. Lỗi chỉ ghi nhật ký, không dừng chạy.
+                string? jobError = await _root.Jobs.OnClosedAsync(no);
+                if (jobError != null) _log($"[khuôn - LỖI] {jobError}");
+            }
             return null;
         }
 
@@ -183,7 +190,7 @@ namespace UI.Services
             foreach (var d in list)
             {
                 ct.ThrowIfCancellationRequested();
-                try { await OnUiTaskAsync(() => d.RunFixtureCommandAsync(FixtureCommand.State)); }
+                try { await OnUiTaskAsync(() => _root.Jobs.ReconcileAsync(d)); }       // hỏi STATE; trả lời B/P/R cập nhật mã đang test
                 catch (Exception ex) when (ex is not OperationCanceledException) { _log($"[khuôn - LỖI] Hỏi trạng thái {d.Name}: {ex.Message}"); }
             }
         }

@@ -86,6 +86,7 @@
                 <MenuItem Header="Bản đồ tín hiệu PLC..." Click="OpenPlcMap_Click" />
                 <MenuItem Header="Điều khiển robot + camera (cửa sổ thả nổi)..." Click="OpenRobotControl_Click" />
                 <MenuItem Header="Bảng FOV (camera / nhánh / mẫu / hiệu chuẩn)..." Click="OpenFovTable_Click" />
+                <MenuItem Header="Mã test (hàng đợi mã QR, trạng thái từng khuôn)..." Click="OpenTestJobs_Click" />
             </MenuItem>
             <MenuItem Header="C_ông cụ">
                 <MenuItem IsEnabled="False" Header="Tùy chọn..." />
@@ -314,7 +315,8 @@
                                        RoiToggleLabel="Vẽ ROI ở đây" RoiToggleChecked="{Binding Roi.OnProcessed, Mode=TwoWay}"
                                        Roi="{Binding Roi.ProcessedRoi}" RoiChangedCommand="{Binding Roi.ApplyCommand}"
                                        EraseAreas="{Binding Roi.ProcessedSketch}" EraseCommand="{Binding Roi.AddSketchAreaCommand}"
-                                       ClearEraseCommand="{Binding Roi.ClearSketchAreasCommand}" />
+                                       ClearEraseCommand="{Binding Roi.ClearSketchAreasCommand}"
+                                       BrushMode="True" UndoEraseCommand="{Binding Roi.UndoSketchAreaCommand}" />
             </Grid>
         </Grid>
     </DockPanel>

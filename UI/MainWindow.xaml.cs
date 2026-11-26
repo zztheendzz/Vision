@@ -70,6 +70,9 @@ namespace UI
 
         private void OpenRobotControl_Click(object sender, RoutedEventArgs e) => OpenRobotControl();
 
+        private void OpenTestJobs_Click(object sender, RoutedEventArgs e)
+            => new TestJobsWindow(_viewModel.Devices.Jobs) { Owner = this }.Show();
+
         private void OpenFovTable_Click(object sender, RoutedEventArgs e)
         {
             var window = new FovTableWindow
