@@ -41,6 +41,11 @@ namespace Vision.Execution
         /// </summary>
         public Dictionary<Guid, (string? ModelPath, string? CalibrationPath)> NodePaths { get; } = new();
 
+        /// <summary>
+        /// Có giá trị: chỉ chạy node này và các node phía trước nó (nguồn dữ liệu của nó); node còn lại bị bỏ qua. Null = chạy cả đồ thị.
+        /// </summary>
+        public Guid? TargetNodeId { get; set; }
+
         public VisionToolInput Seed { get; } = new();
 
         public RunOptions SetSeed<T>(string key, T value)

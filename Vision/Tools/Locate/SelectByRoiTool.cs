@@ -9,7 +9,6 @@ using Vision.Tools.Registry;
 
 namespace Vision.Tools.Locate
 {
-
     public enum RoiShape
     {
         /// <summary>Chữ nhật song song trục ảnh (bỏ qua Phi).</summary>
@@ -40,8 +39,8 @@ namespace Vision.Tools.Locate
 
         public override IReadOnlyList<PortDef> Outputs { get; } = new[]
         {
-            new PortDef("Region", typeof(HRegion)),
-            new PortDef("Image",  typeof(HImage))
+            new PortDef("Image",  typeof(HImage)),
+            new PortDef("Region", typeof(HRegion))
         };
 
         public override IReadOnlyList<ParamDef> Parameters { get; } = RoiRegionFactory.ParamDefs();

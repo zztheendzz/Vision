@@ -10,6 +10,10 @@
              
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="NodeBoolToVis" />
+    </UserControl.Resources>
+
     <!-- Trình soạn thảo đồ thị. DataContext là MainViewModel (kế thừa từ MainWindow). -->
     <nodify:NodifyEditor x:Name="GraphCanvas" AllowDrop="True"
                          DragOver="Canvas_DragOver" Drop="Canvas_Drop"
@@ -66,8 +70,17 @@
                         </DataTemplate>
                     </nodify:Node.OutputConnectorTemplate>
 
-                    <TextBlock Text="{Binding Message}" MaxWidth="180"
-                               TextTrimming="CharacterEllipsis" Margin="6,2" />
+                    <StackPanel>
+                        <Button Content="▶ Chạy tới đây" Command="{Binding RunToHereCommand}"
+                                HorizontalAlignment="Left" Margin="6,2" Padding="6,1" FontSize="11"
+                                ToolTip="Chạy từ đầu đến node này (chạy thử, không lưu, không gửi robot)" />
+                        <TextBlock Text="{Binding Description}" MaxWidth="180" TextWrapping="Wrap" MaxHeight="54"
+                                   TextTrimming="CharacterEllipsis" Margin="6,2" FontStyle="Italic"
+                                   Foreground="#FFE082" ToolTip="{Binding Description}"
+                                   Visibility="{Binding HasDescription, Converter={StaticResource NodeBoolToVis}}" />
+                        <TextBlock Text="{Binding Message}" MaxWidth="180"
+                                   TextTrimming="CharacterEllipsis" Margin="6,2" />
+                    </StackPanel>
                 </nodify:Node>
 
                 <DataTemplate.Triggers>

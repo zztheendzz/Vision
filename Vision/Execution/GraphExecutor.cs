@@ -59,6 +59,8 @@ namespace Vision.Execution
             var effective = BuildEffectiveParameters(graph, options);
 
             var offBranch = ComputeOffBranch(order, effective, options);
+            var notOnPath = ComputeNotOnPathToTarget(order, options);
+            offBranch.UnionWith(notOnPath);
 
             var run = new GraphRunResult();
             try
@@ -74,7 +76,9 @@ namespace Vision.Execution
                     {
                         nr.Status = NodeStatus.Skipped;
                         nr.OffBranch = true;
-                        nr.Message = $"Nhánh của camera khác (FOV {options.Fov} dùng camera '{options.ActiveCamera}')";
+                        nr.Message = notOnPath.Contains(node.Id)
+                            ? "Không nằm trên đường tới node đang chạy, bỏ qua"
+                            : $"Nhánh của camera khác (FOV {options.Fov} dùng camera '{options.ActiveCamera}')";
                         NodeFinished?.Invoke(node, nr);
                         continue;
                     }
@@ -148,6 +152,24 @@ namespace Vision.Execution
         /// (kể cả chính nó); nhánh bị bỏ qua khi không camera nào trong số đó là camera đang dùng. Node không có Camera Image phía trước thì luôn chạy.
         /// Camera Image để trống tham số Camera = camera đầu tiên.
         /// </summary>
+        /// <summary>Khi chạy tới một node: mọi node không phải node đích và không phải tổ tiên của nó.</summary>
+        private static HashSet<Guid> ComputeNotOnPathToTarget(IReadOnlyList<VisionNode> order, RunOptions options)
+        {
+            var skip = new HashSet<Guid>();
+            if (options.TargetNodeId is not { } target) return skip;
+
+            var needed = new HashSet<Guid> { target };
+            foreach (var node in order.Reverse())                      // từ cuối về đầu: node cần thì nguồn của nó cũng cần
+            {
+                if (!needed.Contains(node.Id)) continue;
+                foreach (var port in node.Inputs)
+                    if (port.Connection is { } c) needed.Add(c.From.Owner.Id);
+            }
+            foreach (var node in order)
+                if (!needed.Contains(node.Id)) skip.Add(node.Id);
+            return skip;
+        }
+
         private static HashSet<Guid> ComputeOffBranch(
             IReadOnlyList<VisionNode> order, Dictionary<Guid, Dictionary<string, object?>> effective, RunOptions options)
         {

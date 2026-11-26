@@ -36,6 +36,9 @@ namespace UI.ViewModels.Graph
         public NodeViewModel? SelectedNode => SelectedNodes.FirstOrDefault();
         public event EventHandler? SelectedNodeChanged;
 
+        /// <summary>Người dùng bấm ▶ trên một node: yêu cầu chạy từ đầu đến node đó.</summary>
+        public event EventHandler<NodeViewModel>? RunToNodeRequested;
+
         /// <summary>RunViewModel đặt true khi đang chạy: không cho sửa graph.</summary>
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(DeleteSelectedCommand))]
@@ -80,7 +83,7 @@ namespace UI.ViewModels.Graph
 
         private NodeViewModel AddNodeViewModel(VisionNode node)
         {
-            var vm = new NodeViewModel(node);
+            var vm = new NodeViewModel(node) { RunToHereHandler = n => RunToNodeRequested?.Invoke(this, n) };
             foreach (var c in vm.Inputs.Concat(vm.Outputs)) _connectorMap[c.Model] = c;
             _nodeMap[node] = vm;
             Nodes.Add(vm);

@@ -17,6 +17,9 @@ namespace UI.ViewModels.ToolboxAndParam
         /// <summary>Người dùng vừa sửa một tham số trên bảng (hợp lệ, đã ghi vào node).</summary>
         public event EventHandler? ParameterEdited;
 
+        /// <summary>Người dùng sửa chú thích node (chỉ cần đánh dấu chưa lưu, không dựng lại ROI).</summary>
+        public event EventHandler? DescriptionEdited;
+
         /// <summary>Đọc lại mọi giá trị từ node, khi node bị đổi từ nơi khác (kéo ROI). Không bắn ParameterEdited.</summary>
         public void ReloadValues()
         {
@@ -36,9 +39,24 @@ namespace UI.ViewModels.ToolboxAndParam
 
         public string KindText => Node == null ? "" : "Loại: " + DescribeKind(Node.Model.Tool.Kind);
 
+        /// <summary>Báo công thức đã đổi do thao tác ngoài bảng (vd vẽ vùng xóa trên ảnh).</summary>
+        public void NotifyEdited() => ParameterEdited?.Invoke(this, EventArgs.Empty);
+
+        private void OnNodePropertyChanged(object? s, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(NodeViewModel.Description))
+                DescriptionEdited?.Invoke(this, EventArgs.Empty);
+        }
+
+        partial void OnNodeChanging(NodeViewModel? value)
+        {
+            if (Node != null) Node.PropertyChanged -= OnNodePropertyChanged;
+        }
+
         // Tự chạy mỗi khi Node đổi
         partial void OnNodeChanged(NodeViewModel? value)
         {
+            if (value != null) value.PropertyChanged += OnNodePropertyChanged;
             Parameters.Clear();
 
             if (value != null)

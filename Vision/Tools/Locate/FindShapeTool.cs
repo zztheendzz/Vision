@@ -78,6 +78,7 @@ namespace Vision.Tools.Locate
 
                 // ----- Tinh chỉnh mẫu khi Học mẫu (xem trước bằng nút "Xem mẫu" rồi mới lưu) -----
                 new ParamDef("EraseAreas",  typeof(string), "", Description: "Vùng xóa viền: những chỗ không lấy đường viền vào mẫu. Thêm bằng nút 'Thêm vùng xóa' trên ảnh gốc, hoặc gõ: R row col length1 length2 phi; C row col radius"),
+                new ParamDef("SketchErase", typeof(string), "", Description: "Vùng xóa vẽ tay trên kết quả 'Xem mẫu' (nút + Xóa ▭ / ○ ở khung Ảnh xử lý). Độc lập với EraseAreas, cùng cú pháp. Chỉ vùng này và EraseAreas cùng bị trừ khỏi vùng học"),
                 new ParamDef("ContrastLow",  typeof(double), 0.0, Min: 0, Max: 255, Description: "Ngưỡng tương phản thấp của viền (0 = tự động). Cùng với ContrastHigh: viền yếu hơn ngưỡng thấp bị bỏ"),
                 new ParamDef("ContrastHigh", typeof(double), 0.0, Min: 0, Max: 255, Description: "Ngưỡng tương phản cao (0 = tự động). Viền phải có chỗ mạnh hơn ngưỡng này mới được giữ. Tăng lên để bỏ viền nhiễu"),
                 new ParamDef("MinContourLength", typeof(double), 0.0, Min: 0, Description: "Chiều dài tối thiểu của một đường viền (pixel). Chỉ dùng khi đặt ContrastHigh. Tăng lên để bỏ các đoạn viền ngắn"),
@@ -96,6 +97,8 @@ namespace Vision.Tools.Locate
 
             if (ShapeEraseAreas.Parse(p.Get<string>("EraseAreas"), out string? eraseError) == null)
                 errors.Add(eraseError!);
+            if (ShapeEraseAreas.Parse(p.Get<string>("SketchErase"), out string? sketchError) == null)
+                errors.Add("SketchErase: " + sketchError);
 
             double low = p.Get<double>("ContrastLow"), high = p.Get<double>("ContrastHigh");
             if (high > 0 && (low <= 0 || low > high))
@@ -270,12 +273,12 @@ namespace Vision.Tools.Locate
                 var pose = FindOne(loaded!.Model, searchImage, startRad, extentRad, minScore, greediness, out double score);
                 if (pose == null)
                     return VisionToolResult.NoResult(DescribeMiss(loaded!.Model, searchImage, startRad, extentRad, greediness, minScore));
-                return BuildFound(loaded!, pose.Value, score, context);
+                return BuildFound(loaded!, pose.Value, score, context, region);
             }
             finally { limited?.Dispose(); }
         }
 
-        private static VisionToolResult BuildFound(Loaded loaded, Pose2D poseValue, double score, ToolContext context)
+        private static VisionToolResult BuildFound(Loaded loaded, Pose2D poseValue, double score, ToolContext context, HRegion? searchRegion = null)
         {
             var pose = (Pose2D?)poseValue;
 
@@ -289,7 +292,12 @@ namespace Vision.Tools.Locate
             result.Values["Angle"] = pose.Value.AngleDeg.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
             result.Values["Score"] = score.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
 
-            if (context.NeedDisplay) result.AddDisplay(ContourAt(loaded.Model, pose.Value));
+            if (context.NeedDisplay)
+            {
+                result.AddDisplay(ContourAt(loaded.Model, pose.Value));                  // viền mẫu (xanh lá)
+                if (searchRegion != null && searchRegion.IsInitialized())
+                    result.AddDisplay(searchRegion.CopyObj(1, -1));                      // Region nhận vào = vùng tìm (đỏ)
+            }
             return result;
         }
 

@@ -313,8 +313,8 @@
                 <views:ImageViewerPanel Grid.Row="2" Title="Ảnh xử lý" Display="{Binding Run.Processed}"
                                        RoiToggleLabel="Vẽ ROI ở đây" RoiToggleChecked="{Binding Roi.OnProcessed, Mode=TwoWay}"
                                        Roi="{Binding Roi.ProcessedRoi}" RoiChangedCommand="{Binding Roi.ApplyCommand}"
-                                       EraseAreas="{Binding Roi.ProcessedErase}" EraseCommand="{Binding Roi.AddEraseAreaCommand}"
-                                       ClearEraseCommand="{Binding Roi.ClearEraseAreasCommand}" />
+                                       EraseAreas="{Binding Roi.ProcessedSketch}" EraseCommand="{Binding Roi.AddSketchAreaCommand}"
+                                       ClearEraseCommand="{Binding Roi.ClearSketchAreasCommand}" />
             </Grid>
         </Grid>
     </DockPanel>

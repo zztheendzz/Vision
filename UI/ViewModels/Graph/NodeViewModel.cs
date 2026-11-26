@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.Windows;
 using Vision.Execution;
@@ -28,6 +29,28 @@ namespace UI.ViewModels.Graph
 
         [ObservableProperty]
         private long _elapsedMs;
+
+        /// <summary>Chú thích người dùng nhập; ghi thẳng vào model để lưu cùng công thức.</summary>
+        public string Description
+        {
+            get => Model.Description;
+            set
+            {
+                value ??= "";
+                if (Model.Description == value) return;
+                Model.Description = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasDescription));
+            }
+        }
+
+        /// <summary>GraphEditorViewModel đặt: xử lý khi người dùng bấm nút ▶ trên node (chạy từ đầu đến node này).</summary>
+        public Action<NodeViewModel>? RunToHereHandler { get; set; }
+
+        [RelayCommand]
+        private void RunToHere() => RunToHereHandler?.Invoke(this);
+
+        public bool HasDescription => !string.IsNullOrWhiteSpace(Model.Description);
 
         public NodeViewModel(VisionNode model)
         {

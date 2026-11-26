@@ -29,7 +29,7 @@ namespace UI.ViewModels.ROI
 
         /// <summary>true: ROI vẽ / kéo trên "Ảnh xử lý" (ảnh sau khi qua tool), false: trên "Ảnh gốc".</summary>
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(OriginalRoi), nameof(ProcessedRoi), nameof(OriginalErase), nameof(ProcessedErase))]
+        [NotifyPropertyChangedFor(nameof(OriginalRoi), nameof(ProcessedRoi))]
         private bool _onProcessed;
 
         private bool _autoSwitched;
@@ -37,12 +37,22 @@ namespace UI.ViewModels.ROI
 
         public RoiGeometry? OriginalRoi => OnProcessed ? null : Current;
         public RoiGeometry? ProcessedRoi => OnProcessed ? Current : null;
-        public string? OriginalErase => OnProcessed ? null : EraseAreas;
-        public string? ProcessedErase => OnProcessed ? EraseAreas : null;
+        public string? OriginalErase => EraseAreas;                       // vùng xóa nhập tay: luôn ở khung Ảnh gốc
+
+        /// <summary>Vùng xóa vẽ tay (SketchErase): chỉ hiện ở khung Ảnh xử lý ngay sau "Xem mẫu"; học mẫu xong thì ẩn.</summary>
+        public string? ProcessedSketch => PreviewActive ? SketchAreas : null;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ProcessedSketch))]
+        private bool _previewActive;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ProcessedSketch))]
+        private string? _sketchAreas;
 
         /// <summary>Vùng xóa viền của node đang chọn (chữ). null: node không có tham số EraseAreas.</summary>
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(OriginalErase), nameof(ProcessedErase))]
+        [NotifyPropertyChangedFor(nameof(OriginalErase))]
         private string? _eraseAreas;
 
         public RoiEditorViewModel(GraphEditorViewModel editor, PropertyPanelViewModel properties)
@@ -72,9 +82,45 @@ namespace UI.ViewModels.ROI
             EraseAreas = node != null && node.Tool.Parameters.Any(p => p.Name == EraseParam)
                 ? node.GetParameter<string>(EraseParam)
                 : null;
+            SketchAreas = node != null && node.Tool.Parameters.Any(p => p.Name == SketchParam)
+                ? node.GetParameter<string>(SketchParam)
+                : null;
         }
 
         private const string EraseParam = "EraseAreas";
+        private const string SketchParam = "SketchErase";
+
+        /// <summary>Thêm một vùng xóa vẽ tay (SketchErase) vào node đang chọn.</summary>
+        [RelayCommand]
+        private void AddSketchArea(string? area)
+        {
+            var node = _editor.SelectedNode?.Model;
+            if (node == null || _editor.IsLocked || SketchAreas == null || !PreviewActive) return;
+
+            var parsed = ShapeEraseAreas.Parse(area, out _);
+            if (parsed == null || parsed.Count != 1) return;
+            SetSketch(node, ShapeEraseAreas.Append(SketchAreas, parsed[0]));
+        }
+
+        [RelayCommand]
+        private void ClearSketchAreas()
+        {
+            var node = _editor.SelectedNode?.Model;
+            if (node == null || _editor.IsLocked || SketchAreas == null) return;
+            SetSketch(node, "");
+        }
+
+        private void SetSketch(Vision.Graph.VisionNode node, string text)
+        {
+            try
+            {
+                node.SetParameter(SketchParam, text);
+                SketchAreas = text;
+                _properties.ReloadValues();
+                _properties.NotifyEdited();
+            }
+            catch (ArgumentException) { }
+        }
 
         /// <summary>Thêm một vùng xóa viền (chữ "R ..." hoặc "C ...") vào node đang chọn.</summary>
         [RelayCommand]

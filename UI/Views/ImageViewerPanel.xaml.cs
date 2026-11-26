@@ -228,7 +228,7 @@ namespace UI.Views
             var areas = ShapeEraseAreas.Parse(EraseAreas, out _);
             if (areas == null || areas.Count == 0) return;
 
-            window.SetColor("red");
+            window.SetColor("orange");                       // không dùng đỏ: đỏ là màu Region nhận vào của FindShape
             window.SetLineWidth(2);
             foreach (var a in areas)
             {

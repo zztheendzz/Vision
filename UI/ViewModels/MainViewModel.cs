@@ -70,7 +70,10 @@ namespace UI.ViewModels
             Editor.SelectedNodeChanged += (_, _) => Properties.Node = Editor.SelectedNode;
 
             // Sửa tham số, thêm/xóa node, nối dây... đều đánh dấu "chưa lưu"
+            Editor.RunToNodeRequested += async (_, node) => await Run.RunToNodeAsync(node);
+            Run.PreviewActiveChanged += (_, _) => Roi.PreviewActive = Run.PreviewActive;
             Properties.ParameterEdited += (_, _) => MarkDirty();
+            Properties.DescriptionEdited += (_, _) => MarkDirty();
             Editor.Nodes.CollectionChanged += (_, _) => MarkDirty();
             Editor.Connections.CollectionChanged += (_, _) => MarkDirty();
 
@@ -222,8 +225,7 @@ namespace UI.ViewModels
         private static VisionGraph BuildDemoGraph()
         {
             var g = new VisionGraph();
-
-
+  // rẽ nhánh
             return g;
         }
 

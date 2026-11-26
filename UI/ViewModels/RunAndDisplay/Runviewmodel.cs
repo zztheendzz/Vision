@@ -155,6 +155,20 @@ namespace UI.ViewModels.RunAndDisplay
             StatusText = "Sẵn sàng";
         }
 
+        // ================= XEM MẪU / XÓA VẼ TAY =================
+
+        /// <summary>true ngay sau một lần "Xem mẫu" thành công: khung ảnh xử lý hiện công cụ xóa vẽ tay. Học mẫu hoặc chạy lượt khác thì tắt.</summary>
+        public bool PreviewActive { get; private set; }
+
+        public event EventHandler? PreviewActiveChanged;
+
+        private void SetPreviewActive(bool value)
+        {
+            if (PreviewActive == value) return;
+            PreviewActive = value;
+            PreviewActiveChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         // ================= LỆNH =================
 
         private bool CanRun() => !IsRunning && !IsAuto;
@@ -163,6 +177,23 @@ namespace UI.ViewModels.RunAndDisplay
         [RelayCommand(CanExecute = nameof(CanRun))]
         private Task RunOnceAsync()
             => UsesCamera() ? RunCoreAsync(Mode, GrabFromCamerasAsync) : RunCoreAsync(Mode);
+
+        /// <summary>
+        /// Chạy từ đầu đến một node (chỉ node đó và các node phía trước nó), luôn ở chế độ chạy thử, không lưu kết quả, không gửi robot.
+        /// Node được chọn làm "Ảnh xử lý" để xem ngay kết quả.
+        /// </summary>
+        public Task RunToNodeAsync(NodeViewModel? node)
+        {
+            if (node == null || !CanRun()) return Task.CompletedTask;
+            if (_editor.SelectedNode != node)
+            {
+                _editor.SelectedNodes.Clear();
+                _editor.SelectedNodes.Add(node);
+            }
+            return UsesCamera()
+                ? RunCoreAsync(RunMode.DryRun, GrabFromCamerasAsync, targetNode: node.Model.Id)
+                : RunCoreAsync(RunMode.DryRun, targetNode: node.Model.Id);
+        }
 
         /// <summary>Đồ thị có node "Camera Image" thì mọi lệnh chạy đều tự chụp ảnh từ camera trước (không cần nhớ bấm nút riêng).</summary>
         private bool UsesCamera() => _editor.Model.Nodes.Any(n => n.ToolName == "CameraImage");
@@ -250,7 +281,7 @@ namespace UI.ViewModels.RunAndDisplay
         /// interactive=false (chạy tự động): không hiện hộp thoại báo lỗi, chỉ ghi log và trạng thái.
         /// </summary>
         private async Task<RunVerdict?> RunCoreAsync(
-            RunMode mode, Func<CancellationToken, Task<Dictionary<string, HImage>>>? imageSource = null, bool interactive = true, int? fov = null, bool previewOnly = false)
+            RunMode mode, Func<CancellationToken, Task<Dictionary<string, HImage>>>? imageSource = null, bool interactive = true, int? fov = null, bool previewOnly = false, Guid? targetNode = null)
         {
             var graph = _editor.Model;
             if (graph.Nodes.Count == 0)
@@ -269,7 +300,8 @@ namespace UI.ViewModels.RunAndDisplay
             _editor.ResetRunState();
             StatusText = "Đang chạy...";
 
-            var options = new RunOptions { Mode = mode, NeedDisplay = true, Fov = fov ?? Fov };
+            var options = new RunOptions { Mode = mode, NeedDisplay = true, Fov = fov ?? Fov, TargetNodeId = targetNode };
+            SetPreviewActive(false);                                   // lượt nào cũng bỏ trạng thái "đang xem mẫu"; xem mẫu thành công thì bật lại ở dưới
 
             // Bảng FOV: số FOV quyết định camera chụp, nhánh chạy, file mẫu và file hiệu chuẩn
             if (FovTable is { Entries.Count: > 0 } table && options.Fov >= 0)
@@ -347,6 +379,7 @@ namespace UI.ViewModels.RunAndDisplay
                 AppendLog(StatusText);
 
                 UpdateViewers();
+                if (previewOnly && bad == 0) SetPreviewActive(true);
                 verdict = CycleRecordBuilder.Evaluate(graph, run).Verdict;
 
                 // Chạy thật: gửi độ bù (hoặc NG) cho robot. Chạy thử / học mẫu thì bộ gửi tự bỏ qua.
@@ -363,7 +396,7 @@ namespace UI.ViewModels.RunAndDisplay
                 }
 
                 // Lưu ảnh và kết quả (chỉ khi chạy từ camera, không lưu lúc học mẫu)
-                if (sources != null && mode != RunMode.Teach && SaveResults)
+                if (sources != null && mode != RunMode.Teach && SaveResults && targetNode == null)
                     await SaveCycleAsync(graph, run, sources, mode, startedAt, sw.ElapsedMilliseconds,
                                          sent.Attempted ? sent.Message : null, interactive);
             }

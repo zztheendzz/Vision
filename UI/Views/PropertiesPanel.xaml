@@ -37,6 +37,8 @@
             <StackPanel Margin="0,4,0,8">
                 <TextBlock Text="{Binding Name}" Foreground="{StaticResource VsMutedBrush}" />
                 <ComboBox Margin="0,2,0,0" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected, Mode=TwoWay}" />
+                <TextBlock Style="{StaticResource OptionalText}" Foreground="{StaticResource VsTextBrush}"
+                           TextWrapping="Wrap" Margin="0,4,0,0" Text="{Binding Help}" />
                 <TextBlock Style="{StaticResource OptionalText}" Foreground="#F48771" Margin="0,2,0,0"
                            Text="{Binding ErrorMessage}" />
                 <TextBlock Style="{StaticResource OptionalText}" Foreground="{StaticResource VsMutedBrush}"
@@ -76,6 +78,13 @@
                         <TextBlock Text="{Binding Properties.Node.Title}" FontSize="15" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding Properties.KindText}" Foreground="{StaticResource VsMutedBrush}"
                                    Margin="0,2,0,10" />
+
+                        <TextBlock Text="CHÚ THÍCH" Foreground="{StaticResource VsAccentBrush}"
+                                   FontWeight="SemiBold" Margin="0,4,0,4" />
+                        <TextBox Text="{Binding Properties.Node.Description, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="120"
+                                 VerticalScrollBarVisibility="Auto" Margin="0,0,0,10"
+                                 ToolTip="Ghi chú cho node này. Hiện ngay trên node trong đồ thị." />
 
                         <TextBlock Text="THAM SỐ" Foreground="{StaticResource VsAccentBrush}"
                                    FontWeight="SemiBold" Margin="0,4,0,4" />
