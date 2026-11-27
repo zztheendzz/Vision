@@ -298,6 +298,8 @@ namespace Communication.Configuration
                     Term(KeyTx, "Ký tự kết thúc TX"),
                     Term(KeyRx, "Ký tự kết thúc RX"),
                     Int("ListenPort", "Cổng nhận", 5002, 1, 65535, "Chung"),
+                    Int("ReplyTimeoutS", "Chờ trả lời từ khuôn (giây)", 20, 1, 600, "Chung",
+                        "Một ô chung cho mọi lệnh gửi khuôn có chờ trả lời: mở, đóng, STATE, CHECKSENSOR, START. Hết giờ mà khuôn không trả lời thì báo lỗi. (Quét khuôn có thời gian chờ riêng bên dưới)"),
                     Txt("Scan.Command", "Quét khuôn – lệnh gửi", "ASK", "Quét khuôn",
                         "Lệnh gửi tới tất cả địa chỉ để hỏi khuôn. Mặc định ASK, đổi được theo khuôn của bạn."),
                     Int("Scan.Port", "Quét khuôn – cổng", 9999, 1, 65535, "Quét khuôn", "Cổng của khuôn để hỏi. Mặc định 9999."),

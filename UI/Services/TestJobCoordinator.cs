@@ -198,7 +198,7 @@ namespace UI.Services
                 var fixture = await OnUi(() => _root.Devices.FirstOrDefault(d => d.Config.Type == Communication.Configuration.DeviceType.Fixture
                                                                                    && d.Enabled && d.FixtureNo == fixtureNo));
                 if (fixture == null) error = $"không có khuôn số {fixtureNo:00} đang bật";
-                else await OnUiTask(() => fixture.SendStartAsync(job.Code));
+                else error = await OnUiResult(() => fixture.SendStartAsync(job.Code));       // null = START_OK
             }
             catch (Exception ex) { error = ex.Message; }
 
@@ -372,6 +372,9 @@ namespace UI.Services
 
         private static Task<T> OnUi<T>(Func<T> f)
             => System.Windows.Application.Current.Dispatcher.InvokeAsync(f).Task;
+
+        private static Task<T> OnUiResult<T>(Func<Task<T>> f)
+            => System.Windows.Application.Current.Dispatcher.InvokeAsync(f).Task.Unwrap();
 
         private static Task OnUiTask(Func<Task> f)
             => System.Windows.Application.Current.Dispatcher.InvokeAsync(f).Task.Unwrap();

@@ -969,24 +969,82 @@ namespace UI.ViewModels.Device
             finally { FixtureBusy = false; }
         }
 
-        /// <summary>Gửi "START:&lt;mã&gt;" một lần tới khuôn này, không chờ trả lời, không gửi lại. Ném lỗi nếu chưa nối.</summary>
-        public async Task SendStartAsync(string code)
+        private TaskCompletionSource<string>? _startReply;
+
+        private static bool IsStartReply(string line)
+        {
+            string u = (line ?? "").Trim().ToUpperInvariant();
+            return u.StartsWith("START") && (u.EndsWith("_OK") || u.EndsWith("_ERROR"));
+        }
+
+        /// <summary>
+        /// Gửi "START:&lt;mã&gt;" một lần tới khuôn này rồi chờ START_OK / START_ERROR (thời gian chờ theo ô chung, mặc định 20 giây).
+        /// Trả về null nếu khuôn trả START_OK, ngược lại là lý do lỗi. Không bao giờ gửi lại. Ném lỗi nếu chưa nối.
+        /// </summary>
+        public async Task<string?> SendStartAsync(string code)
         {
             if (_owner.Manager.GetLink(Id) is not ITransport transport || !transport.IsConnected)
                 throw new InvalidOperationException("chưa kết nối khuôn này");
 
             string text = "START:" + code;
+            int timeoutMs = ReplyTimeoutMs;
             var tcp = transport as TcpTransport;
             Log("GỬI", text + (tcp != null ? RawTrace.Visible(tcp.TxTerminator) : ""));
-            await transport.SendAsync(text);
             RunOnUi(() => Message = $"Gửi: {text}");
+
+            // Trả lời có thể đến trên kết nối lệnh hoặc về "Cổng nhận": cái nào đến trước thì dùng
+            var fromListener = _startReply = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            try
+            {
+                var request = transport.RequestAsync(text, timeoutMs);
+                string reply;
+                if (await Task.WhenAny(request, fromListener.Task) == fromListener.Task)
+                {
+                    _ = request.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                    reply = fromListener.Task.Result;
+                }
+                else
+                {
+                    reply = await request;
+                    Log("NHẬN", reply + (tcp != null ? RawTrace.Visible(tcp.RxTerminator) : ""));
+                }
+
+                string u = reply.Trim().ToUpperInvariant();
+                if (u.StartsWith("START") && u.EndsWith("_OK")) return null;
+                if (u.StartsWith("START") && u.EndsWith("_ERROR")) return "khuôn trả START_ERROR";
+                return $"khuôn trả lời lạ: {reply.Trim()}";
+            }
+            catch (TimeoutException)
+            {
+                return $"khuôn không trả lời START trong {timeoutMs / 1000} giây";
+            }
+            catch (Exception ex) when (ex is not InvalidOperationException)
+            {
+                return $"lỗi chờ trả lời START: {ex.Message}";
+            }
+            finally
+            {
+                _startReply = null;
+            }
         }
 
         // CHECKSENSOR chỉ gửi khi bấm nút hoặc trước khi đóng khuôn lúc chạy tự động; không kiểm tra liên tục.
         private bool _quietPoll;     // giữ cho Log() (không còn dùng để nén nhật ký)
 
-        private async Task SendFixtureCommandAsync(ITransport transport, FixtureCommand command, int timeoutMs = 5000)
+        /// <summary>Thời gian chờ trả lời từ khuôn (ms), lấy từ ô chung "Chờ trả lời từ khuôn (giây)", mặc định 20 giây.</summary>
+        private int ReplyTimeoutMs
         {
+            get
+            {
+                string text = _catalog.GetGroupValueOrDefault(DeviceType.Fixture, "ReplyTimeoutS");
+                int seconds = int.TryParse(text, out int v) && v > 0 ? Math.Min(v, 600) : 20;
+                return seconds * 1000;
+            }
+        }
+
+        private async Task SendFixtureCommandAsync(ITransport transport, FixtureCommand command, int timeoutMs = 0)
+        {
+            if (timeoutMs <= 0) timeoutMs = ReplyTimeoutMs;
             var protocol = Protocol;
             int ss = FixtureNo;
             string text = protocol.BuildCommand(command, ss);
@@ -1026,6 +1084,13 @@ namespace UI.ViewModels.Device
         /// </summary>
         public bool TryApplyReply(string line)
         {
+            // Trả lời START về cổng nhận: START_OK / START_ERROR
+            if (_startReply != null && IsStartReply(line))
+            {
+                _startReply.TrySetResult(line);
+                return true;
+            }
+
             var protocol = Protocol;
             int ss = FixtureNo;
 
